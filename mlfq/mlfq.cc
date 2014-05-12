@@ -48,7 +48,12 @@ void MLFQ::enque(Packet* p)
 			hf->ce() = 1;
 	}
 	//enqueue packet
-	q_[prio]->enque(p);
+	if(prio<queue_num_)
+	{
+		q_[prio]->enque(p);
+	}
+	else
+		q_[0]->enque(p);
 }
 
 Packet* MLFQ::deque()
