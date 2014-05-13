@@ -3,7 +3,7 @@ set data_size  [lindex $argv 1]
 set queue_num [lindex $argv 2]
 
 set RTT 0.0001 
-set DCTCP_K 20
+set DCTCP_K 10
 #RED or MLFQ
 set switchAlg MLFQ
 
