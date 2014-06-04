@@ -6,10 +6,9 @@ import string
 def usage():
 	sys.stderr.write('result.py [file]\n')
 
-#Return a normalized time
+#Return a optimal time for this flow
 #pkt: number of packets in this flow
-#time: absolute time
-def fct(pkt,time):
+def optimal(pkt):
 	opt=0.0
 	if pkt<=12:
 		opt=0.0000804+pkt*0.0000012
@@ -19,7 +18,13 @@ def fct(pkt,time):
 		opt=3*0.0000804+(pkt-36)*0.0000012
 	else:
 		opt=3*0.0000804+(pkt-84)*0.0000012
-	return time/opt
+	return opt
+
+#pkt: number of packets in this flow
+#time: absolute time
+def fct(pkt,time):
+	return time*1000
+	#return time/opt
 
 #Get average FCT
 def avg(flows):
@@ -33,10 +38,10 @@ def mean(flows):
 	flows.sort()
 	return flows[50*len(flows)/100]
 	
-#GET 95% FCT
+#GET 99% FCT
 def max(flows):
 	flows.sort()
-	return flows[95*len(flows)/100]
+	return flows[99*len(flows)/100]
 	
 	
 if len(sys.argv)==2:
@@ -63,8 +68,8 @@ if len(sys.argv)==2:
 		byte_size=float(pkt_size)*1460
 		time=float(line.split()[1])
 		result=fct(pkt_size,time)
-		if result<1:
-			print str(pkt_size)+" "+str(result)
+		#if result<1:
+		#	print str(pkt_size)+" "+str(result)
 		flows.append(result)
 		
 		#If there are TCP timeouts
@@ -85,10 +90,7 @@ if len(sys.argv)==2:
 	fp.close()
 	print "There are "+str(len(flows))+" flows in total"
 	print "There are "+str(timeouts)+" TCP timeouts in total"
-	print "Overall average normalized FCT: "+str(avg(flows))
-	print "Average normalized FCT (0,100KB): "+str(len(short_flows))+" flows "+str(avg(short_flows))
-	print "95th percentile normalized FCT (0, 100KB): "+str(max(short_flows))
-	print "Average normalized FCT (100KB,10MB): "+str(len(median_flows))+" flows "+str(avg(median_flows))
-	print "95th percentile normalized FCT (100KB, 10MB): "+str(max(median_flows))
-	print "Average normalized FCT (10MB,): "+str(len(large_flows))+" flows "+str(avg(large_flows))
-	print "95th percentile normalized FCT (10MB,): "+str(max(large_flows))
+	print "Overall average FCT: "+str(avg(flows))
+	print "Average FCT (0,100KB): "+str(len(short_flows))+" flows "+str(avg(short_flows))
+	print "Average FCT (100KB,10MB): "+str(len(median_flows))+" flows "+str(avg(median_flows))
+	print "Average FCT (10MB,): "+str(len(large_flows))+" flows "+str(avg(large_flows))
