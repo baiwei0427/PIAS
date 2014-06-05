@@ -1,13 +1,12 @@
 #!/usr/bin/perl -w
-#$sim_end = 100000; #num of flows
-$sim_end = 100000; #num of flows
+$sim_end = 50000; #num of flows
 
 $cap = 10;
 $link_delay = 0.0000002;
 $host_delay = 0.000020; 
 
 @queueSize = (160);
-@min_rto = (0.000200);
+@min_rto = (0.0002);
 
 @load = (0.8);
 $connections_per_pair = 1;

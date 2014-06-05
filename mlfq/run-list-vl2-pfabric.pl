@@ -1,26 +1,27 @@
 #!/usr/bin/perl -w
-$sim_end = 50000; #num of flows
+$sim_end = 50000;
 
 $cap = 10;
 $link_delay = 0.0000002;
 $host_delay = 0.000020; 
 
 @queueSize = (160);
-@min_rto = (0.002);#for DCTCP/MLFQ
+@min_rto = (0.0002);
 
 @load = (0.8);
 $connections_per_pair = 1;
-$meanFlowSize = 1138 * 1460;
+$meanFlowSize = 5117 * 1460;
 @paretoShape = (1.05);
 $enableMultiPath = 1;
 
-@perflowMP = (0);  #Shuang!
+@perflowMP = (0);
 
 @sourceAlg = ("DCTCP-Sack");
 @ackratio = (1); #(1,12)
 @slowstartrestart = ("true");
 $DCTCP_g = 1.0/16.0;
-$switchAlg = "MLFQ";
+#$switchAlg = "RED";
+$switchAlg = "DropTail";
 @drop_prio_ = ("true");
 @deque_prio_ = ("true");
 @prio_scheme_ = (2);
@@ -37,7 +38,7 @@ $Pacer_rate_ave_factor = 0.125;
 @Pacer_assoc_timeout = (0.001);
 
 @PQ_mode = (0);
-@DCTCP_K = (72);#for DCTCP
+@DCTCP_K = (10000);
 @enablePQ = (0);
 @PQ_gamma = (0);
 @PQ_thresh = (0);
@@ -48,13 +49,15 @@ $Pacer_rate_ave_factor = 0.125;
 @topology_x = (1);
 
 $enableNAM = 0;
+
 $numcores = 7;
+
 $trial = 1;
 
 ###########################################
 $user = "wei";
 ###########################################
-$tcl_script = "spine_empirical_dctcp";
+$tcl_script = "spine_empirical_vl2";
 $top_dir = "/home/$user";
 $work_dir = "/home/$user/mlfq";
 ###########################################
