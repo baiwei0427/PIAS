@@ -36,24 +36,36 @@ void MLFQ::enque(Packet* p)
 	int qlimBytes = qlim_ * mean_pktsize_;
 	
 	//queue length exceeds the queue limit
-	if(queueByteLength()+hdr_cmn::access(p)->size()>qlimBytes)
+	if(queueByteLength(queue_num_)+hdr_cmn::access(p)->size()>qlimBytes)
 	{
 		drop(p);
 		return;
 	}
-	//ECN enqueue marking
-	if(dequeue_marking_==0&&queueByteLength()+hdr_cmn::access(p)->size()>thresh_*mean_pktsize_)
-	{	
-		if (hf->ect()) //If this packet is ECN-capable 
-			hf->ce() = 1;
-	}
-	//enqueue packet
-	if(prio<queue_num_)
+	
+	if(prio>=queue_num_)
+		prio=queue_num_-1;
+		
+	//ECN enqueue marking and normal marking
+	if(dequeue_marking_==0 && prio_marking_==0)
 	{
-		q_[prio]->enque(p);
+		if(queueByteLength(queue_num_)+hdr_cmn::access(p)->size()>thresh_*mean_pktsize_)
+		{
+			if (hf->ect()) //If this packet is ECN-capable 
+				hf->ce() = 1;
+		}
 	}
-	else 
-		q_[queue_num_-1]->enque(p);
+	//ECN enqueue marking and priority marking
+	else if(dequeue_marking_==0 && prio_marking_==1)
+	{
+		if(queueByteLength(prio+1)+hdr_cmn::access(p)->size()>thresh_*mean_pktsize_)
+		{
+			if (hf->ect()) //If this packet is ECN-capable 
+				hf->ce() = 1;
+		}
+	}
+	
+	//Enqueue packet
+	q_[prio]->enque(p);
 }
 
 Packet* MLFQ::deque()
@@ -64,13 +76,27 @@ Packet* MLFQ::deque()
 		if(q_[i]->length()>0)
 		{
 			Packet* p=q_[i]->deque();
-			//ECN dequeue marking 
-			if(dequeue_marking_==1&&queueByteLength()>thresh_*mean_pktsize_)
+			//ECN dequeue marking and normal marking 
+			if(dequeue_marking_==1&& prio_marking_==0)
 			{
-				hdr_flags* hf = hdr_flags::access(p);
-				if (hf->ect()) //If this packet is ECN-capable 
-					hf->ce() = 1;
+				if(queueByteLength(queue_num_)>thresh_*mean_pktsize_)
+				{
+					hdr_flags* hf = hdr_flags::access(p);
+					if (hf->ect()) //If this packet is ECN-capable 
+						hf->ce() = 1;
+				}
 			}
+			//ECN dequeue marking and priority marking 
+			else if(dequeue_marking_==1&& prio_marking_==1)
+			{
+				if(queueByteLength(i+1)>thresh_*mean_pktsize_)
+				{
+					hdr_flags* hf = hdr_flags::access(p);
+					if (hf->ect()) //If this packet is ECN-capable 
+						hf->ce() = 1;
+				}
+			}
+			
 			//dequeue packet
 			return (p);
 		}
