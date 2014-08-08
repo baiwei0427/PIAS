@@ -1,7 +1,12 @@
-DualQueue
-=========
+PIAS
+==========
 
-Using both AQM-based solutions and Scheduling solutions to reduce FCT in data centers
+Practical Information-Agnostic Flow Scheduling for Datacenter Networks
+
+Keywords
+==========
+
+Linux Kernel, Netfilter, ECN, Scheduling 
 
 People
 ==========
