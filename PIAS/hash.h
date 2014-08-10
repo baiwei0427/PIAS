@@ -66,7 +66,7 @@ static void Init_Information(struct Information* info)
 static void Init_Flow(struct Flow* f)
 {
 	f->direction=0;
-	f>remote_ip=0;
+	f->remote_ip=0;
 	f->local_ip=0;
 	f->remote_port=0;
 	f->local_port=0;
@@ -155,7 +155,7 @@ static int Insert_List(struct FlowList* fl, struct Flow* f)
 
 //Insert a new Flow entry into a FlowTable
 //If success, return 1. Else return 0
-static void Insert_Table(struct FlowTable* ft,struct Flow* f)
+static int Insert_Table(struct FlowTable* ft,struct Flow* f)
 {
 		int result=0;
         unsigned int index=Hash(f);
@@ -163,8 +163,8 @@ static void Insert_Table(struct FlowTable* ft,struct Flow* f)
         //Insert Flow to appropriate FlowList based on Hash value
         result=Insert_List(&(ft->table[index]),f);
         //Increase the size of FlowTable
-        rt->size+=result;
-        //printk(KERN_INFO "Insert complete\n");
+        ft->size+=result;
+        printk(KERN_INFO "Insert complete\n");
 		return result;
 }
 
@@ -208,7 +208,7 @@ static struct Information* Search_List(struct FlowList* fl, struct Flow* f)
 }
 
 //Search the information for a given Flow in a FlowTable
-static struct Infomation* Search_Table(struct FlowTable* ft, struct Flow* f)
+static struct Information* Search_Table(struct FlowTable* ft, struct Flow* f)
 {
 	unsigned int index=0;
 	index=Hash(f);
@@ -272,7 +272,7 @@ static int Delete_Table(struct FlowTable* ft,struct Flow* f)
 	result=Delete_List(&(ft->table[index]),f);
 	//Reduce the size of FlowTable according to return result of Delete_List
 	ft->size-=result;
-	//printk(KERN_INFO "Delete %d \n",result);
+	printk(KERN_INFO "Delete %d \n",result);
 	return result;
 }
 

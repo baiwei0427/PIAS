@@ -58,7 +58,12 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 	struct iphdr *ip_header=NULL;					//IP  header structure
 	struct tcphdr *tcp_header=NULL;				//TCP header structure
 	struct Flow f;													//Flow structure
-	struct Infomation* info_pointer=NULL;	//Pointer to structure Information
+	struct Information* info_pointer=NULL;	//Pointer to structure Information
+	unsigned short int src_port;							//TCP source port
+	unsigned short int dst_port;						//TCP destination port
+	unsigned long flags;         	 							//variable for save current states of irq
+	unsigned int dscp;											//DSCP value
+	unsigned int payload_len;								//TCP payload length
 	
 	//Get IP header
 	ip_header=(struct iphdr *)skb_network_header(skb);
@@ -72,27 +77,90 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 	if(ip_header->protocol==IPPROTO_TCP) 
 	{
 		tcp_header = (struct tcphdr *)((__u32 *)ip_header+ ip_header->ihl);
+		src_port=htons((unsigned short int) tcp_header->source);
+		dst_port=htons((unsigned short int) tcp_header->dest);
 		//We only deal with our experiment traffic: TCP source port or destination port = 5001
-		if(htons((unsigned short int) tcp_header->dest)==5001||htons((unsigned short int) tcp_header->source)==5001)
+		if(src_port==5001||dst_port==5001)
 		{
-			//TCP SYN packets, a new  initialized outgoing connection
-			if(tcp_header->syn&&!tcp_header->ack)
+			//TCP SYN packet, a new  initialized outgoing connection
+			if(tcp_header->syn)
 			{
-				
-			}
-			//TCP SYN/ACK packets, a new initialized incoming connection
-			else if(tcp_header->syn&&tcp_header->ack)
-			{
-				
+				//A new Flow entry should be inserted into FlowTable
+				f.local_ip=ip_header->saddr;
+				f.remote_ip=ip_header->daddr;
+				f.local_port=src_port;
+				f.remote_port=dst_port;
+				if(tcp_header->ack) //SYN/ACK packet. This connection is actively by remote side 
+				{
+					f.direction=INCOMING;
+				}
+				else //SYN packet. This connection is actively opened by local side
+				{
+					f.direction=OUTGOING;
+				}
+				f.info.start_time=get_tsval();
+				f.info.latest_receive_time=f.info.start_time;
+				f.info.srtt=MIN_RTT;
+				f.info.seq=ntohl(tcp_header->seq);
+				f.info.ack=ntohl(tcp_header->ack_seq);
+				f.info.receive_data=0;
+				f.info.send_data=0;
+				//TCP status is of no use in current version. More functions will be added in the future.
+				f.info.status=0;
+				//Insert new Flow entry
+				spin_lock_irqsave(&globalLock,flags);
+				if(Insert_Table(&ft,&f)==0)
+				{
+					printk(KERN_INFO "Insert fails\n");
+				}
+				spin_unlock_irqrestore(&globalLock,flags);
+				dscp=priority(0);
+				modify_dscp(skb,dscp);
 			}
 			//TCP FIN/RST packets, connection will be closed 
 			else if(tcp_header->fin||tcp_header->rst)
 			{
-				
+				//An existing Flow entry should be deleted from FlowTable. 
+				Init_Flow(&f);
+				f.local_ip=ip_header->saddr;
+				f.remote_ip=ip_header->daddr;
+				f.local_port=src_port;
+				f.remote_port=dst_port;
+				//Delete existing Flow entry
+				spin_lock_irqsave(&globalLock,flags);
+				if(Delete_Table(&ft,&f)==0)
+				{
+					printk(KERN_INFO "Delete fails\n");
+				}
+				spin_unlock_irqrestore(&globalLock,flags);
+				dscp=priority(0);
+				modify_dscp(skb,dscp);
 			}
 			else
 			{
-				
+				//Update existing Flow entry's information
+				Init_Flow(&f);
+				f.local_ip=ip_header->saddr;
+				f.remote_ip=ip_header->daddr;
+				f.local_port=src_port;
+				f.remote_port=dst_port;
+				info_pointer=Search_Table(&ft,&f);
+				if(info_pointer!=NULL)
+				{
+					//TCP payload length=Total length - IP header length-TCP header length
+					payload_len=skb->len-(ip_header->ihl<<2)-(unsigned int)(tcp_header->doff*4);
+					//payload length>0 and info_pointer->send_data will not exceed the maximum value of unsigned int  (4,294,967,295)
+					if(payload_len>0 && payload_len+info_pointer->send_data<4294967295)
+						info_pointer->send_data+=payload_len;
+					dscp=priority(info_pointer->send_data);
+					modify_dscp(skb,dscp);
+				}
+				//No such Flow entry, last few packets
+				else
+				{
+					dscp=priority(0);
+					modify_dscp(skb,dscp);
+				}
 			}
 		}
 	}
@@ -103,6 +171,50 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 static unsigned int hook_func_in(unsigned int hooknum, struct sk_buff *skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *))
 {
 	
+	struct iphdr *ip_header=NULL;					//IP  header structure
+	struct tcphdr *tcp_header=NULL;				//TCP header structure
+	struct Flow f;													//Flow structure
+	struct Information* info_pointer=NULL;	//Pointer to structure Information
+	unsigned short int src_port;							//TCP source port
+	unsigned short int dst_port;						//TCP destination port
+	//unsigned long flags;         	 							//variable for save current states of irq
+	unsigned int payload_len;								//TCP payload length
+	
+	//Get IP header
+	ip_header=(struct iphdr *)skb_network_header(skb);
+	//The packet is not an IP packet (e.g. ARP or others), return NF_ACCEPT
+	if (!ip_header)
+	{
+		return NF_ACCEPT;
+	}
+	
+	//TCP
+	if(ip_header->protocol==IPPROTO_TCP) 
+	{
+		tcp_header = (struct tcphdr *)((__u32 *)ip_header+ ip_header->ihl);
+		src_port=htons((unsigned short int) tcp_header->source);
+		dst_port=htons((unsigned short int) tcp_header->dest);
+		//We only deal with our experiment traffic: TCP source port or destination port = 5001
+		if(src_port==5001||dst_port==5001)
+		{
+			//Update existing Flow entry's information. Note that direction has been changed.
+			Init_Flow(&f);
+			f.local_ip=ip_header->daddr;
+			f.remote_ip=ip_header->saddr;
+			f.local_port=dst_port;
+			f.remote_port=src_port;
+			info_pointer=Search_Table(&ft,&f);
+			if(info_pointer!=NULL)
+			{
+				//TCP payload length=Total length - IP header length-TCP header length
+				payload_len=skb->len-(ip_header->ihl<<2)-(unsigned int)(tcp_header->doff*4);
+				//payload length>0 and info_pointer->receive_data will not exceed the maximum value of unsigned int  (4,294,967,295)
+				if(payload_len>0 && payload_len+info_pointer->receive_data<4294967295)
+					info_pointer->receive_data+=payload_len;
+			}
+		}
+	}
+	return NF_ACCEPT;
 }
 
 //Called when module loaded using 'insmod'
@@ -129,11 +241,11 @@ int init_module()
 	nf_register_hook(&nfho_outgoing);									//register hook
 	
 	//Register Netlink 
-    sk = netlink_kernel_create(&init_net,NETLINK_TEST,0,nl_custom_data_ready,NULL,THIS_MODULE);
+   /* sk = netlink_kernel_create(&init_net,NETLINK_TEST,0,nl_custom_data_ready,NULL,THIS_MODULE);
 	if (!sk) 
 	{
         printk(KERN_INFO "Netlink create error!\n");
-    }
+    }*/
 	
 	printk(KERN_INFO "Start PIAS kernel module\n");
 	return 0;
@@ -142,6 +254,13 @@ int init_module()
 //Called when module unloaded using 'rmmod'
 void cleanup_module()
 {
-	netlink_kernel_release(sk);
+	//Unregister two hooks
+	nf_unregister_hook(&nfho_outgoing);  
+	nf_unregister_hook(&nfho_incoming);
+	
+	//Clear table
+	 Empty_Table(&ft);
+
+	//netlink_kernel_release(sk);
 	printk(KERN_INFO "Stop PIAS kernel module\n");
 }

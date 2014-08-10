@@ -3,6 +3,7 @@
 
 #define INCOMING	0
 #define OUTGOING	1
+#define MIN_RTT 		100 //(us) The base RTT of our testbed is 100us for 1Gigabit network
 
 //Define the structure of information of a TCP flow
 //We use receive_data/(latest_receive_time-start_time) to calculate FCT at receiver side
@@ -23,7 +24,7 @@ struct Information
 	//the total size of data sent by local side
 	unsigned int send_data;
 	//status of TCP 
-	unsigned int stauts;
+	unsigned int status;
 }; 
 
 //Define the structure of for a TCP flow
