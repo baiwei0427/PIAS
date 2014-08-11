@@ -32,8 +32,23 @@ static unsigned int modify_dscp(struct sk_buff *skb, unsigned int dscp)
 	}
 	 //Get new IP header
 	ip_header=(struct iphdr *)skb_network_header(skb);
-	//Calculate ideal TOS value. Note that packets may be ECT (CE bits=10)
-	tos_value=4*dscp+2;
+	//Calculate ideal TOS value. Note that packets must be set to be ECT (CE bits=10)
+	//CE bits=10 or 00
+	if(ip_header->tos==0x00||ip_header->tos==0x02)
+	{
+		tos_value=4*dscp+2;
+	}
+	//CE bits=01
+	else if(ip_header->tos==0x01)
+	{
+		tos_value=4*dscp+1;
+	}
+	//CE bits=11
+	else
+	{
+		tos_value=4*dscp+3;
+	}
+	
 	tmp=(unsigned char*)&tos_value;
 	//Modify TOS of IP header
 	ip_header->tos=*tmp;
