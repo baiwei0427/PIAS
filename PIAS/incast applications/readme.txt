@@ -1,4 +1,4 @@
-This application is used to generated incast pattern traffic.
+This application is used to generate incast pattern traffic.
 
 It consists of two parts: the client application running on the receiver and the server application running on the senders
 
