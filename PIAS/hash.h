@@ -1,25 +1,27 @@
 #ifndef HASH_H
 #define HASH_H
 
-#include <linux/module.h> 
-#include <linux/kernel.h> 
-#include <linux/vmalloc.h>
+#include<linux/module.h> 
+#include<linux/kernel.h> 
+#include<linux/vmalloc.h>
+#include<linux/slab.h>
 
 #include "flow.h" //Get definition of Flow structure
 
-#define HASH_RANGE 1024
-#define QUEUE_SIZE 128
+#define	HASH_RANGE	256
+#define	QUEUE_SIZE	32
 
+//In this version, all FlowNodes are allocated by kmalloc while FlowList and FlowTable are allocated by vmalloc 
 //Node of Flow
 struct FlowNode{
-        struct Flow f;         				//content of flow
-        struct FlowNode* next; 	//pointer to next node 
+        struct Flow	f;         				//content of flow
+        struct FlowNode* next; 		//pointer to next node 
 };
 
 //List of Flows
 struct FlowList{
-        struct FlowNode* head; 	//pointer to head node of this link list
-        int len;              						 //current length of this list (max: QUEUE_SIZE)
+        struct FlowNode* head; 		//pointer to head node of this link list
+        int len;              						 	//current length of this list (max: QUEUE_SIZE)
 };
 
 //Hash Table of Flows
@@ -28,48 +30,61 @@ struct FlowTable{
         int size;              					 //total number of nodes in this table
 };
 
+//Print a flow information
+//Type: Insert(0) Delete(1)
+static void Print_Flow(struct Flow* f, int type)
+{
+	char local_ip[16]={0};           
+	char remote_ip[16]={0};           
+	
+	snprintf(local_ip, 16, "%pI4", &(f->local_ip));
+	snprintf(remote_ip, 16, "%pI4", &(f->remote_ip));
+	
+	if(type==0) //Insert
+	{
+		printk(KERN_INFO "Insert a Flow record <%s:%hu , %s:%hu> \n",local_ip,f->local_port,remote_ip,f->remote_port);
+	}
+	else if(type==1) //Delete
+	{
+		printk(KERN_INFO "Delete a Flow record <%s:%hu , %s:%hu >\n",local_ip,f->local_port,remote_ip,f->remote_port);
+	}
+	else //Otherwise
+	{
+		printk(KERN_INFO "Flow record <%s:%hu , %s:%hu > \n",local_ip,f->local_port,remote_ip,f->remote_port);
+	}
+}
+
 //Hash function, given a Flow node, calculate it should be inserted into which FlowList
 static unsigned int Hash(struct Flow* f)
 {
 	//return a value in [0,HASH_RANGE-1]
-	return ((f->local_ip/(256*256*256)+1)*(f->remote_ip/(256*256*256)+1)*(f->local_port/(256*256*256)+1)*(f->remote_port/(256*256*256)+1))%HASH_RANGE;
+	return ((f->local_ip/(256*256*256)+1)*(f->remote_ip/(256*256*256)+1)*(f->local_port+1)*(f->remote_port+1))%HASH_RANGE;
 }
 
 //Determine whether two Flows are equal (same flow) 
 static int Equal(struct Flow* f1,struct Flow* f2)
 {
 	//<local_ip,local_port,remote_ip,remote_port> determines a TCP flow
-	if((f1->local_ip==f2->local_ip)&&(f1->remote_ip==f2->remote_ip)&&(f1->local_port==f2->local_port)&&(f1->remote_port==f2->remote_port))
-	{
-		return 1;
-	}
-	else
-	{
-		return 0;
-	}
+	return ((f1->local_ip==f2->local_ip)&&(f1->remote_ip==f2->remote_ip)&&(f1->local_port==f2->local_port)&&(f1->remote_port==f2->remote_port));
 }
+
 
 //Initialize a TCP flow information entry
 static void Init_Information(struct Information* info)
 {
-	info->start_time=0;
-	info->latest_receive_time=0;
-	info->srtt=0;
-	info->seq=0;
-	info->ack=0;
-	info->receive_data=0;
+	info->last_update_time=0;
 	info->send_data=0;
-	info->status=0;
 }
 
 //Initialize a complete TCP flow 
 static void Init_Flow(struct Flow* f)
 {
-	f->direction=0;
+	//Initialize basic information for this flow
 	f->remote_ip=0;
 	f->local_ip=0;
 	f->remote_port=0;
 	f->local_port=0;
+	//Initialize the Info of this Flow
 	Init_Information(&(f->info));
 }
 
@@ -78,28 +93,48 @@ static void Init_Node(struct FlowNode* fn)
 {
 	//Initialize the pointer to next node as NULL
 	fn->next=NULL;
+	//Initialize a flow structure
 	Init_Flow(&(fn->f));
 }
 
 //Initialize a FlowList
 static void Init_List(struct FlowList* fl)
 {
+	struct FlowNode* buf=NULL;
 	//No node in current list
 	fl->len=0;
-	fl->head=vmalloc(sizeof(struct  FlowNode));
-	Init_Node(fl->head);
+	buf=kmalloc(sizeof(struct  FlowNode),GFP_KERNEL);
+	if(!buf)
+	{
+		printk(KERN_INFO "Kmalloc error\n");
+	}
+	else
+	{
+		fl->head=buf;
+		Init_Node(fl->head);
+	}
 } 
 
 //Initialize FlowTable
 static void Init_Table(struct FlowTable* ft)
 {
 	int i=0;
+	struct FlowList* buf=NULL;
+	
 	//Allocate space for FlowLists
-	ft->table=vmalloc(HASH_RANGE*sizeof(struct FlowList));
-	//Initialize each FlowList
-	for(i=0;i<HASH_RANGE;i++)
+	buf=vmalloc(HASH_RANGE*sizeof(struct FlowList));
+	if(!buf)
 	{
-		Init_List(&(ft->table[i]));
+		printk(KERN_INFO "Vmalloc error\n");
+	}
+	else
+	{
+		ft->table=buf;
+		//Initialize each FlowList
+		for(i=0;i<HASH_RANGE;i++)
+		{
+			Init_List(&(ft->table[i]));
+		}
 	}
 	//No nodes in current table
 	ft->size=0;
@@ -109,47 +144,54 @@ static void Init_Table(struct FlowTable* ft)
 //If the Flow entry is inserted successfully, return 1
 //Else, fl->len>=QUEUE_SIZE or the same Flow entry exists, return 0
 static int Insert_List(struct FlowList* fl, struct Flow* f)
-{
-	//Reach maximum queue size in this list
-	if(fl->len>=QUEUE_SIZE)
+{	
+	if(fl->len>=QUEUE_SIZE) 
 	{
-		//printk(KERN_INFO "No enough space in this FlowList\n");
+		printk(KERN_INFO "No enough space in this link list\n");
 		return 0;
-	}
-	else
+	} 
+	else 
 	{
-		struct FlowNode* tmp=fl->head;
+        struct FlowNode* tmp=fl->head;
+		struct FlowNode* buf=NULL;
 		
-		//Find the tail of FlowList
-		while(1)
-		{
-			//If pointer to next node is NULL, we find the tail of this FlowList. Here we can insert our new Flow entry
-			if(tmp->next==NULL)
-			{
-				//Allocate space for next FlowNode
-				tmp->next=vmalloc(sizeof(struct FlowNode));
-				//Copy data for this new FlowNode
-				tmp->next->f=*f;
-				//Pointer to next node is NULL
-				tmp->next->next=NULL;
-				//Increase the length of current FlowList
-				fl->len++;
-				//Finish the insert, return 1
-				return 1;
+        //Come to the tail of this FlowList
+        while(1)
+        {
+            if(!tmp->next)//If pointer to next node is NULL, we find the tail of this FlowList. Here we can insert our new Flow
+            {
+				//Allocate memory
+				buf=kmalloc(sizeof(struct FlowNode),GFP_KERNEL);
+				if(!buf) //Fail to allocate memory
+				{
+					printk(KERN_INFO "Kmalloc error\n");
+					return 0;
+				}
+				else
+				{
+					Print_Flow(f,0);
+					tmp->next=buf;
+					//Copy data for this new FlowNode
+					tmp->next->f=*f;
+					//Pointer to next FlowNode is NUll
+					tmp->next->next=NULL;
+					//Increase length of FlowList
+					fl->len++;
+					//Finish the insert
+					return 1;
+				}
 			}
-			//If we find the same Flow entry, we sould return 0 
-			else if(Equal(&(tmp->next->f),f)==1)
+			else if(Equal(&(tmp->next->f),f)==1) //If the rule of next node is the same as our inserted flow, we just finish the insert  
 			{
+				printk(KERN_INFO "Equal Flow\n");
 				return 0;
 			}
-			//Move to next FlowNode
-			else
-			{
+            else //Move to next FlowNode
+            {
 				tmp=tmp->next;
-			}
-		}
+            }
+       }
 	}
-	//By default, return 0
 	return 0;
 }
 
@@ -159,12 +201,12 @@ static int Insert_Table(struct FlowTable* ft,struct Flow* f)
 {
 		int result=0;
         unsigned int index=Hash(f);
-       // printk(KERN_INFO "Insert to FlowList:%u\n",index);
+       // printk(KERN_INFO "Insert to FlowList: %u\n",index);
         //Insert Flow to appropriate FlowList based on Hash value
         result=Insert_List(&(ft->table[index]),f);
         //Increase the size of FlowTable
         ft->size+=result;
-        printk(KERN_INFO "Insert complete\n");
+        //printk(KERN_INFO "Insert complete\n");
 		return result;
 }
 
@@ -175,6 +217,7 @@ static struct Information* Search_List(struct FlowList* fl, struct Flow* f)
 	//If the length of this FlowList is 0, return NULL
 	if(fl->len==0)
 	{
+		//printk(KERN_INFO "Nothing in this FlowList\n");
 		return NULL;
 	}
 	else
@@ -245,7 +288,7 @@ static int Delete_List(struct FlowList* fl, struct Flow* f)
 				
 				tmp->next=s->next;
 				//Delete matching FlowNode from this FlowList
-				vfree(s);
+				kfree(s);
 				//Reduce the length of this FlowList by one
 				fl->len--;
 				//printk(KERN_INFO "Delete a flow record\n");
@@ -272,7 +315,7 @@ static int Delete_Table(struct FlowTable* ft,struct Flow* f)
 	result=Delete_List(&(ft->table[index]),f);
 	//Reduce the size of FlowTable according to return result of Delete_List
 	ft->size-=result;
-	printk(KERN_INFO "Delete %d \n",result);
+	//printk(KERN_INFO "Delete %d \n",result);
 	return result;
 }
 
@@ -285,7 +328,7 @@ static void Empty_List(struct FlowList* fl)
 	{
 		NextNode=Ptr->next;
 		//Actually, we delete the fl->head in the first iteration
-		vfree(Ptr);
+		kfree(Ptr);
 	}
 }
 
@@ -298,30 +341,6 @@ static void Empty_Table(struct FlowTable* ft)
 		Empty_List(&(ft->table[i]));
 	}
 	vfree(ft->table);
-}
-
-//Print a flow information
-//Type: Insert(0) Delete(1)
-static void Print_Flow(struct Flow* f, int type)
-{
-	char local_ip[16]={0};           
-	char remote_ip[16]={0};           
-	
-	snprintf(local_ip, 16, "%pI4", &(f->local_ip));
-	snprintf(remote_ip, 16, "%pI4", &(f->remote_ip));
-	
-	if(type==0) //Insert
-	{
-		printk(KERN_INFO "Insert a Flow record <%s:%hu , %s:%hu> \n",local_ip,f->local_port,remote_ip,f->remote_port);
-	}
-	else if(type==1) //Delete
-	{
-		printk(KERN_INFO "Delete a Flow record <%s:%hu , %s:%hu >\n",local_ip,f->local_port,remote_ip,f->remote_port);
-	}
-	else //Otherwise
-	{
-		printk(KERN_INFO "Flow record <%s:%hu , %s:%hu > \n",local_ip,f->local_port,remote_ip,f->remote_port);
-	}
 }
 
 //Print a FlowNode

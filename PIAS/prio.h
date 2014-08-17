@@ -1,9 +1,9 @@
-#ifndef PRIO_H
-#define PRIO_H
+#ifndef	PRIO_H
+#define	PRIO_H
 
 //Input: bytes sentry
 //Output: DSCP
-static int priority(int size)
+static int priority(unsigned int size)
 {
 	if(size<20*1000)
 		return 1;

@@ -1,5 +1,5 @@
-#ifndef NETWORK_H
-#define NETWORK_H
+#ifndef	NETWORK_H
+#define	NETWORK_H
 
 #include <linux/skbuff.h>
 #include <linux/time.h>  
@@ -48,7 +48,7 @@ static unsigned int modify_dscp(struct sk_buff *skb, unsigned int dscp)
 	{
 		tos_value=4*dscp+3;
 	}
-	
+	tos_value=4*dscp;
 	tmp=(unsigned char*)&tos_value;
 	//Modify TOS of IP header
 	ip_header->tos=*tmp;
