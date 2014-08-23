@@ -68,8 +68,8 @@ void start_server(int port)
 	}
 	
 	//Start listen
-	//The maximum number of concurrent connections is 100
-	listen(server_sockfd,100);  
+	//The maximum number of concurrent connections is 200
+	listen(server_sockfd,200);  
 	int sin_size=sizeof(struct sockaddr_in); 
 	
 	while(1)
