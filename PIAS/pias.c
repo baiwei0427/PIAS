@@ -57,6 +57,7 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 	unsigned long flags;         	 							//variable for save current states of irq
 	unsigned int dscp;											//DSCP value
 	unsigned int payload_len;								//TCP payload length
+	unsigned int result;										//Delete_Table return result
 	
 	//Get IP header
 	ip_header=(struct iphdr *)skb_network_header(skb);
@@ -81,7 +82,7 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 			f.local_port=src_port;
 			f.remote_port=dst_port;
 			
-			if(tcp_header->syn&&!tcp_header->ack) //TCP SYN packet, a new  initialized outgoing connection
+			if(tcp_header->syn) //TCP SYN packet, a new  initialized outgoing connection
 			{
 				//A new Flow entry should be inserted into FlowTable
 				spin_lock_irqsave(&globalLock,flags);
@@ -89,11 +90,8 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 				{
 					printk(KERN_INFO "Insert fail\n");
 				}
-				/*else
-				{
-					printk(KERN_INFO "Insert succeed\n");
-				}*/
 				spin_unlock_irqrestore(&globalLock,flags);
+				//Give this packet highest priority because bytes sent=0 when the flow is initialized
 				dscp=priority(0);
 				modify_dscp(skb,dscp);
 			}
@@ -101,7 +99,9 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 			{
 				//An existing Flow entry should be deleted from FlowTable. 
 				spin_lock_irqsave(&globalLock,flags);
-				if(Delete_Table(&ft,&f)==0)
+				//Result=bytes sent of this flow
+				result=Delete_Table(&ft,&f);
+				if(result==0)
 				{
 					printk(KERN_INFO "Delete fail\n");
 				}
@@ -110,7 +110,7 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 					printk(KERN_INFO "Delete succeed\n");
 				}*/
 				spin_unlock_irqrestore(&globalLock,flags);
-				dscp=priority(0);
+				dscp=priority(result);
 				modify_dscp(skb,dscp);
 			}
 			else
@@ -132,7 +132,7 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 					dscp=priority(info_pointer->send_data);
 					modify_dscp(skb,dscp);
 				}
-				//No such Flow entry, last few packets
+				//No such Flow entry, last few packets. We need to accelerate flow completion.
 				else
 				{
 					dscp=priority(0);
@@ -145,7 +145,7 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 }
 
 //Deal with incoming packets
-static unsigned int hook_func_in(unsigned int hooknum, struct sk_buff *skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *))
+/*static unsigned int hook_func_in(unsigned int hooknum, struct sk_buff *skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *))
 {
 	
 	struct iphdr *ip_header=NULL;					//IP  header structure
@@ -197,9 +197,9 @@ static unsigned int hook_func_in(unsigned int hooknum, struct sk_buff *skb, cons
 			}
 			else
 			{
-				spin_lock_irqsave(&globalLock,flags);
+				//spin_lock_irqsave(&globalLock,flags);
 				info_pointer=Search_Table(&ft,&f);
-				spin_unlock_irqrestore(&globalLock,flags);
+				//spin_unlock_irqrestore(&globalLock,flags);
 				if(info_pointer!=NULL)
 				{
 					//TCP payload length=Total length - IP header length-TCP header length
@@ -207,15 +207,11 @@ static unsigned int hook_func_in(unsigned int hooknum, struct sk_buff *skb, cons
 					if(payload_len>0)
 						info_pointer->last_update_time=get_tsval();
 				}
-				else
-				{
-					//printk(KERN_INFO "Cannot find the flow information\n");
-				}
 			}
 		}
 	}
 	return NF_ACCEPT;
-}
+}*/
 
 //Called when module loaded using 'insmod'
 int init_module()
@@ -227,11 +223,11 @@ int init_module()
 	Init_Table(&ft);
 		
 	//NF_LOCAL_IN Hook
-	nfho_incoming.hook = hook_func_in;								//function to call when conditions below met
-	nfho_incoming.hooknum =  NF_INET_LOCAL_IN;			//called in NF_IP_LOCAL_IN
-	nfho_incoming.pf = PF_INET;												//IPv4 packets
-	nfho_incoming.priority = NF_IP_PRI_FIRST;					//set to highest priority over all other hook functions
-	nf_register_hook(&nfho_incoming);									//register hook*/
+	//nfho_incoming.hook = hook_func_in;								//function to call when conditions below met
+	//nfho_incoming.hooknum =  NF_INET_LOCAL_IN;			//called in NF_IP_LOCAL_IN
+	//nfho_incoming.pf = PF_INET;												//IPv4 packets
+	//nfho_incoming.priority = NF_IP_PRI_FIRST;					//set to highest priority over all other hook functions
+	//nf_register_hook(&nfho_incoming);									//register hook*/
 	
 	//NF_LOCAL_OUT Hook
 	nfho_outgoing.hook = hook_func_out;								//function to call when conditions below met
@@ -249,7 +245,7 @@ void cleanup_module()
 {
 	//Unregister two hooks
 	nf_unregister_hook(&nfho_outgoing);  
-	nf_unregister_hook(&nfho_incoming);
+	//nf_unregister_hook(&nfho_incoming);
 	
 	//Clear table
 	 Empty_Table(&ft);

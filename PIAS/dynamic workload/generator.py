@@ -81,8 +81,10 @@ else:
 	#Write trace results into output file
 	#Trace format: time_interval flow_size host_id 
 	output_file=open(output_filename,'w')
+	start=random.randint(0,host_num-1)
 	for i in range(flow_num):
-		output_file.write(str(times[i])+' '+str(flows[i])+' '+str(random.randint(0,host_num-1))+'\n')
+		output_file.write(str(times[i])+' '+str(flows[i])+' '+str(start)+'\n')
+		start=(start+1)%host_num
 	output_file.close()
 	
 	print 'Auto generate '+str(len(flows))+' flows:'

@@ -103,10 +103,10 @@ static void Init_List(struct FlowList* fl)
 	struct FlowNode* buf=NULL;
 	//No node in current list
 	fl->len=0;
-	buf=kmalloc(sizeof(struct  FlowNode),GFP_KERNEL);
+	buf=vmalloc(sizeof(struct  FlowNode));
 	if(!buf)
 	{
-		printk(KERN_INFO "Kmalloc error\n");
+		printk(KERN_INFO "Vmalloc error\n");
 	}
 	else
 	{
@@ -161,7 +161,7 @@ static int Insert_List(struct FlowList* fl, struct Flow* f)
             if(!tmp->next)//If pointer to next node is NULL, we find the tail of this FlowList. Here we can insert our new Flow
             {
 				//Allocate memory
-				buf=kmalloc(sizeof(struct FlowNode),GFP_KERNEL);
+				buf=kmalloc(sizeof(struct FlowNode),GFP_ATOMIC);
 				if(!buf) //Fail to allocate memory
 				{
 					printk(KERN_INFO "Kmalloc error\n");
@@ -259,10 +259,11 @@ static struct Information* Search_Table(struct FlowTable* ft, struct Flow* f)
 }
 
 //Delete a given Flow entry from FlowList
-//If the Flow entry is successfully deleted, return 1
+//If the Flow entry is successfully deleted, return bytes sent (if bytes sent=0, return 1)
 //Else, return 0
-static int Delete_List(struct FlowList* fl, struct Flow* f)
+static unsigned int Delete_List(struct FlowList* fl, struct Flow* f)
 {
+	unsigned int result=0;
 	//No node in current FlowList
 	if(fl->len==0) 
 	{
@@ -284,15 +285,18 @@ static int Delete_List(struct FlowList* fl, struct Flow* f)
 			//Find the matching FlowNode (matching FlowNode is tmp->next rather than tmp, we should delete tmp->next)
 			else if(Equal(&(tmp->next->f),f)==1) 
 			{
+				result=tmp->next->f.info.send_data;
+				if(result==0)
+					result=1;
 				struct FlowNode* s=tmp->next;
-				
 				tmp->next=s->next;
 				//Delete matching FlowNode from this FlowList
 				kfree(s);
 				//Reduce the length of this FlowList by one
 				fl->len--;
 				//printk(KERN_INFO "Delete a flow record\n");
-				return 1;
+				//Return bytes sent
+				return result;
 			}
 			else //No matching FlowNode
 			{
@@ -314,8 +318,10 @@ static int Delete_Table(struct FlowTable* ft,struct Flow* f)
 	//Delete Flow from appropriate FlowList based on Hash value
 	result=Delete_List(&(ft->table[index]),f);
 	//Reduce the size of FlowTable according to return result of Delete_List
-	ft->size-=result;
+	if(result>0)
+		ft->size-=1;
 	//printk(KERN_INFO "Delete %d \n",result);
+	//return bytes sent 
 	return result;
 }
 
@@ -328,7 +334,11 @@ static void Empty_List(struct FlowList* fl)
 	{
 		NextNode=Ptr->next;
 		//Actually, we delete the fl->head in the first iteration
-		kfree(Ptr);
+		//For fl->head, we use vfree. For other nodes, we use kfree
+		if(Ptr==fl->head)
+			vfree(Ptr);
+		else
+			kfree(Ptr);
 	}
 }
 
