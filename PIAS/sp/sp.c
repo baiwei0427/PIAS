@@ -33,38 +33,26 @@ MODULE_AUTHOR("BAI Wei wbaiab@cse.ust.hk");
 MODULE_VERSION("1.0");
 MODULE_DESCRIPTION("Kernel module of Strict Priority Queuing (SP) with ECN");
 
-//ECN marking threshold (bytes): 120KB in 10G network, 30KB in 1G network
-#define ECN_thresh 120000
+//ECN marking threshold (bytes): 150KB in 10G network (we need to take TSO into consideration)
+#define ECN_thresh 150000
 //1 denotes we use per-port ECN while 0 denotes we use per-queue ECN
 #define Port_ECN 1 
 //Number of priority queues (levels)
 #define Prio_level 2 
 //Maximum number of packets in a priority queue
 #define Queue_size 256
-/*
- * Link speed in Mbps. System time V will be incremented at this rate and the
- * rate limits of flows (still using the weight variable) should be also
- * indicated in Mbps.
- *
- * This value should actually be about 9844Mb/s but we leave it at
- * 9800 with the hope of having small queues in the NIC.  The reason
- * is that with a given MTU, each packet has an Ethernet preamble (4B)
- * and the frame check sequence (8B) and a minimum recommended
- * inter-packet gap (0.0096us for 10GbE = 12B).  Thus the max
- * achievable data rate is MTU / (MTU + 24), which is 0.98439 with MTU
- * = 1500B and and 0.99734 with MTU=9000B.
- */
-#define LINK_SPEED		9430	// 1Gbps link=943Mbps  10Gbps link=9430Mbps
+//10Gbps link=9412 Mbps goodput for iperf with LSO enabled
+#define LINK_SPEED	9412	
 //microsecond to nanosecond
 #define US_TO_NS(x)	(x * 1E3L)
 //millisecond to nanosecond
 #define MS_TO_NS(x)	(x * 1E6L)
 
-//Link rate 1Mbps=0.125MBit per second=125000 Bit per second
+//Link rate 1Mbps=0.125MBit per second=125 KBit per second
 static	unsigned long rate=LINK_SPEED*125000;
 //Delay: we set 50us in 10G network because TSO sized (64KB) packet takes 51.2us to transmit at 10G network 
 static unsigned long delay_in_us = 50L;
-//Bucket size 64KB in 1G and 360KB in 10G
+//Bucket size: 360KB in 10G
 static unsigned long bucket=360000;
 //Tokens in bucket
 static unsigned long tokens=0;
@@ -200,11 +188,24 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 		if(src_port==5001||dst_port==5001||ip_header->protocol==IPPROTO_ICMP)
 		{
 			priority=classify((unsigned int)ip_header->tos>>2);
+			
+			//For test
+			if(ip_header->protocol==IPPROTO_ICMP)
+				printk(KERN_INFO "Priority %u\n", priority);
+				
 			//If no packet in current queues has higher priority than this incoming packet and there are enough tokens  
 			if(queue_sum_size(q,priority)==0&&tokens>=skb->len)
 			{
 				spin_lock_irqsave(&globalLock,flags);
-				tokens=tokens-skb->len;
+				//In our testbed, 52 bytes= IP header (20 bytes)+ TCP header (20 bytes)+ TCP options (12 bytes)
+				if(skb->len>52)
+				{	
+					tokens=tokens-(skb->len-52);
+				}
+				else	 //May be ICMP
+				{
+					tokens=tokens-skb->len;
+				}
 				spin_unlock_irqrestore(&globalLock,flags);
 				return NF_ACCEPT;
 			}
@@ -212,13 +213,15 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 			{
 				spin_lock_irqsave(&globalLock,flags);
 				//Per-port ECN marking
-				if(Port_ECN==1&&queue_sum_bytes(q,Prio_level-1)>=ECN_thresh)
+				if(Port_ECN==1&&queue_sum_bytes(q,Prio_level-1)>ECN_thresh)
 				{
+					printk(KERN_INFO "ECN marking\n");
 					ECN_mark(skb);
 				}
 				//Per-queue ECN marking
-				else if(Port_ECN==0&&q[priority]->bytes>=ECN_thresh)
+				else if(Port_ECN==0&&q[priority]->bytes>ECN_thresh)
 				{
+					printk(KERN_INFO "ECN marking\n");
 					ECN_mark(skb);
 				}
 				result=Enqueue_PacketQueue(q[priority],skb,okfn);
@@ -266,7 +269,11 @@ static enum hrtimer_restart my_hrtimer_callback( struct hrtimer *timer )
 			//There are still some packets in queues[i]
 			if(q[i]->size>0)
 			{	
-				len=q[i]->packets[q[i]->head].skb->len;
+				//In our testbed, 52 bytes= IP header (20 bytes)+ TCP header (20 bytes)+ TCP options (12 bytes)
+				if(q[i]->packets[q[i]->head].skb->len>52)
+					len=q[i]->packets[q[i]->head].skb->len-52;
+				else
+					len=q[i]->packets[q[i]->head].skb->len;
 				if(len<=tokens)
 				{
 					//Reduce tokens
@@ -329,7 +336,7 @@ int init_module()
 	nf_register_hook(&nfho_outgoing);									//register hook
 	
 	//Initialize tokens
-	tokens=0;
+	tokens=bucket;
 	
 	//Initialize timer
 	do_gettimeofday(&tv_old);
