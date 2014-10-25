@@ -19,9 +19,13 @@ Hong Kong University of Science and Technology
 
 Papers
 ==========
-PIAS in HotNets 2014  http://conferences.sigcomm.org/hotnets/2014/papers/hotnets-XIII-final91.pdf
+PIAS in HotNets 2014  
 
-PIAS technical report http://sing.cse.ust.hk/~wei/pias-tr.pdf
+http://conferences.sigcomm.org/hotnets/2014/papers/hotnets-XIII-final91.pdf
+
+PIAS technical report 
+
+http://sing.cse.ust.hk/~wei/pias-tr.pdf
 
 How to use
 ==========
