@@ -20,8 +20,7 @@ Hong Kong University of Science and Technology
 How to use
 ==========
 
-PIAS is implemented as a Linux Netfilter kernel module to maintain flow states and mark packets at end hosts. PIAS 
-kernel module introduces no modifications to network stack or applications. Just visit https://github.com/baiwei0427/PIAS/tree/master/PIAS to download source code of PIAS kernel module.
+PIAS is implemented as a Linux Netfilter kernel module to maintain flow states and mark packets at end hosts. PIAS  kernel module introduces no modifications to network stack or applications. Please visit https://github.com/baiwei0427/PIAS/tree/master/PIAS to download source code of PIAS kernel module.
 
 
 
