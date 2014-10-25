@@ -20,7 +20,9 @@ Hong Kong University of Science and Technology
 How to use
 ==========
 
-PIAS is implemented as a Linux Netfilter kernel module to maintain flow states and mark packets at end hosts. Please visit https://github.com/baiwei0427/PIAS/tree/master/PIAS to download source codes of PIAS kernel module. The key idea of PIAS kernel module is quite simple: maintaing flow states for active flows in a hash table and modify DSCP field of IP header based on the bytes sent information of the flow and priority settings.
+PIAS is implemented as a Linux Netfilter kernel module to maintain flow states and mark packets at end hosts. Please visit https://github.com/baiwei0427/PIAS/tree/master/PIAS to download source codes of PIAS kernel module. The key idea of PIAS kernel module is quite simple: maintaing flow states for active flows in a hash table and modifying DSCP field of IP header based on the bytes sent information of the flow and priority settings.
+
+PIAS also requires configuraing strict priority queueing and ECN on switches. In my experiment, I use per-port ECN. 
 
 Currently, I am still improving PIAS in following two aspects:
 
