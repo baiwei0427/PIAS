@@ -3,18 +3,23 @@
 
 //The structure of information of a TCP flow
 //latest_update_time: the last time when we observe an outgoing packet (from local side to remote side) 
-//latest_seq: the largest(latest) sequence number of outoging traffic 
-//send_data: the total size of outgoing traffic  
+//latest_timeout_time: the last time when we observe an TCP timeout
+//latest_timeout_seq: the sequence number for last TCP timeout
+//latest_seq: the largest (latest) sequence number for outoging traffic 
+//latest_ack: the largest (latest) ACK number for outoging traffic 
+//bytes_sent: the total payload size of outgoing traffic  
 //timeouts: the number of consecutive timeouts experienced by outgoing traffic
-//priority: the latest priority of incoming traffic
 struct Information 
 {
 	unsigned int latest_update_time; 	
+	unsigned int latest_timeout_time;
+	unsigned int latest_timeout_seq;
 	unsigned int latest_seq;
-	unsigned int send_data;
+	unsigned int latest_ack;
+	unsigned int bytes_sent;
 	unsigned int timeouts;
 	//0 is the highest priority 
-	unsigned int priority;
+	//unsigned int priority;
 }; 
 
 //The structure of for a TCP flow

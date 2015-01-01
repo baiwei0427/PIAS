@@ -204,17 +204,30 @@ static unsigned int tcp_modify_outgoing(struct sk_buff *skb, unsigned int win, u
 }
 
 //Maximum 32-bit integer value: 4294967295
-//Function: determine whether seq1 is no smaller than seq2
+//Function: determine whether seq1 is larger than seq2
 //If Yes, return 1. Else, return 0.
-static unsigned short int seq_no_smaller(unsigned int seq1, unsigned int seq2)
+//We use a simple heuristic to handle wrapped TCP sequence number 
+static unsigned short int is_seq_larger(unsigned int seq1, unsigned int seq2)
 {
-    if(seq1>=seq2)
-        return 1;
-    //A simple heuristic to handle wrapped TCP sequence number 
-     else if(seq1<seq2-4294900000)
-        return 1;
-     else
-        return 0;
+    if(likely(seq1>seq2&&seq1-seq2<=4294900000))
+	{
+		return 1;
+	}
+	else if(seq1<seq2&&seq2-seq1>4294900000)
+	{
+		return 1;
+	}
+	else
+	{
+		return 0;
+	}
 }
 
+static unsigned int seq_gap(unsigned int seq1, unsigned int seq2)
+{
+    if(likely(seq1>=seq2))
+        return seq1-seq2;
+    else
+        return 4294967295-(seq2-seq1); 
+}
 #endif

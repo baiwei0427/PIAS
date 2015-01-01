@@ -26,7 +26,7 @@ static u8 priority(unsigned int size)
 	else
 		return 0;*/
 	//For Data Mining with eight queues, our thresholds are 1KB, 8KB, 80KB, 122KB, 130KB, 132KB, 133KB
-	if(size<=1*1024)
+	/*if(size<=1*1024)
 		return 7;
 	else if(size<=8*1024)
 		return 6;
@@ -41,7 +41,7 @@ static u8 priority(unsigned int size)
 	else if(size<=133*1024)
 		return 1;
 	else
-		return 0;
+		return 0;*/
 	//For Web Search with two queues (equal split), our thresholds are 72KB
 	/*if(size<=72*1024)
 		return 1;
@@ -83,9 +83,9 @@ static u8 priority(unsigned int size)
 	else 
 		return 0;*/
 	//For static flow experiment, the right threshold is 20KB 
-	/*if(size<=1024*1024)
+	if(size<=20*1024)
 		return 1;
 	else 
-		return 0;*/
+		return 0;
 }
 #endif

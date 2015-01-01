@@ -75,11 +75,14 @@ static int Equal(struct Flow* f1,struct Flow* f2)
 //Initialize a TCP flow information entry
 static void Init_Information(struct Information* info)
 {
-	info->lastest_update_time=0;
+	info->latest_update_time=0;
+	info->latest_timeout_time=0;
+	info->latest_timeout_seq=0;
 	info->latest_seq=0;
-	info->send_data=0;
+	info->latest_ack=0;
+	info->bytes_sent=0;
 	info->timeouts=0;
-	info->priority=0;
+	//info->priority=0;
 }
 
 //Initialize a complete TCP flow 
@@ -292,7 +295,7 @@ static unsigned int Delete_List(struct FlowList* fl, struct Flow* f)
 			//Find the matching FlowNode (matching FlowNode is tmp->next rather than tmp, we should delete tmp->next)
 			else if(Equal(&(tmp->next->f),f)==1) 
 			{
-				result=tmp->next->f.info.send_data;
+				result=tmp->next->f.info.bytes_sent;
 				if(result==0)
 					result=1;
 				struct FlowNode* s=tmp->next;

@@ -55,8 +55,6 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 	struct tcphdr *tcp_header=NULL;	//TCP header structure
 	struct Flow f;	//Flow structure
 	struct Information* info_pointer=NULL;	//Pointer to structure Information
-	unsigned short int src_port;	//TCP source port
-	unsigned short int dst_port;	//TCP destination port
 	unsigned long flags;	//variable for save current states of irq
 	unsigned int dscp;	//DSCP value
 	unsigned int payload_len;	//TCP payload length
@@ -83,18 +81,16 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 	{
 		now=get_tsval();
 		tcp_header = (struct tcphdr *)((__u32 *)ip_header+ ip_header->ihl);
-		src_port=ntohs(tcp_header->source);
-		dst_port=ntohs(tcp_header->dest);
 		Init_Flow(&f);
 		f.local_ip=ip_header->saddr;
 		f.remote_ip=ip_header->daddr;
-		f.local_port=src_port;
-		f.remote_port=dst_port;
+		f.local_port=ntohs(tcp_header->source);
+		f.remote_port=ntohs(tcp_header->dest);
 		//TCP SYN packet, a new  connection
 		if(tcp_header->syn) 
 		{
-			f.info.last_update_time=now;
-			f.info.latest_seq=ntohl(tcp_header->seq);
+			f.info.latest_seq=ntohl(tcp_header->seq);	
+			f.info.latest_update_time=now;
 			//A new Flow entry should be inserted into FlowTable
 			spin_lock_irqsave(&(ft.tableLock),flags);
 			if(Insert_Table(&ft,&f)==0)
@@ -127,39 +123,50 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 			//Update existing Flow entry's information
 			spin_lock_irqsave(&(ft.tableLock),flags);
 			info_pointer=Search_Table(&ft,&f);
-			spin_unlock_irqrestore(&(ft.tableLock),flags);
 			if(info_pointer!=NULL)
 			{
 				//TCP payload length=Total IP length - IP header length-TCP header length
-				payload_len= (unsigned int)ntohs(ip_header->tot_len)-(ip_header->ihl<<2)-(tcp_header->doff<<2);       
+				payload_len=(unsigned int)ntohs(ip_header->tot_len)-(ip_header->ihl<<2)-(tcp_header->doff<<2);       
 				seq=ntohl(tcp_header->seq);
-				if(seq_no_smaller(seq,info_pointer->latest_seq)==1)
+				if(payload_len>=1)
+					seq=seq+payload_len-1;
+				if(is_seq_larger(seq,info_pointer->latest_seq)==1)
 				{
-					//TCP keeps moving 
-					info_pointer->timeouts=0;
-					if(payload_len+info_pointer->send_data<MAX_BYTES_SENT)
+					if(payload_len+info_pointer->bytes_sent<MAX_BYTES_SENT)
 					{
-						info_pointer->send_data+=payload_len;
-						info_pointer->last_update_time=now;
+						info_pointer->bytes_sent+=payload_len;
 						info_pointer->latest_seq=seq;
 					}
 				}
-				//Packet drops and retransmission. We should not inrease send_data of this flow
+				//Packet drops happen!. We should not inrease bytes_sent of this flow
 				else
 				{
 					//TCP timeout
-					if(now-info_pointer->last_update_time>=RTO_MIN)
+					if(now-info_pointer->latest_update_time>=RTO_MIN)
 					{
-						info_pointer->timeouts++;
-						//Several consecutive TCP timeouts
-						if(info_pointer->timeouts>=TIMEOUT_THRESH)
+						printk(KERN_INFO "TCP timeout is detected with RTO of %u",now-info_pointer->latest_update_time); 
+						//It's a 'consecutive' TCP timeout? 
+						if(seq_gap(seq,info_pointer->latest_timeout_seq)<=5*1448||seq_gap(info_pointer->latest_timeout_seq,seq)<=5*1448)
 						{
-							info_pointer->timeouts=0;
-							info_pointer->send_data=0;
+							info_pointer->timeouts++;
+							//Fixed threshold of consecutive TCP timeouts
+							if(info_pointer->timeouts>=TIMEOUT_THRESH)
+							{
+								printk(KERN_INFO "%u consecutive TCP timeouts are detected!\n", TIMEOUT_THRESH);
+								info_pointer->timeouts=0;
+								info_pointer->bytes_sent=0;
+							}
 						}
+						//It is the first timeout
+						else
+						{
+							info_pointer->timeouts=1;
+						}
+						info_pointer->latest_timeout_seq=seq;
 					}
 				}
-				dscp=priority(info_pointer->send_data);
+				info_pointer->latest_update_time=now;
+				dscp=priority(info_pointer->bytes_sent);
 				enable_ecn_dscp(skb,dscp);
 			}
 			//No such Flow entry, last few packets. We need to accelerate flow completion.
@@ -168,6 +175,7 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 				dscp=priority(0);
 				enable_ecn_dscp(skb,dscp);
 			}
+			spin_unlock_irqrestore(&(ft.tableLock),flags);
 		}
 	}
 	return NF_ACCEPT;
@@ -177,14 +185,12 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 static unsigned int hook_func_in(unsigned int hooknum, struct sk_buff *skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *))
 {
 	
-	struct iphdr *ip_header=NULL;					//IP  header structure
-	struct tcphdr *tcp_header=NULL;				//TCP header structure
-	struct Flow f;													//Flow structure
+	struct iphdr *ip_header=NULL;	//IP  header structure
+	struct tcphdr *tcp_header=NULL;	//TCP header structure
+	struct Flow f;	//Flow structure
 	struct Information* info_pointer=NULL;	//Pointer to structure Information
-	unsigned short int src_port;							//TCP source port
-	unsigned short int dst_port;						//TCP destination port
-	unsigned long flags;         	 							//variable for save current states of irq
-	unsigned int payload_len;								//TCP payload length
+	unsigned int ack;
+	unsigned long flags;	//variable for save current states of irq
 
 	if(!in)
         return NF_ACCEPT;
@@ -204,49 +210,27 @@ static unsigned int hook_func_in(unsigned int hooknum, struct sk_buff *skb, cons
 	if(ip_header->protocol==IPPROTO_TCP) 
 	{
 		tcp_header = (struct tcphdr *)((__u32 *)ip_header+ ip_header->ihl);
-		src_port=ntohs(tcp_header->source);
-		dst_port=ntohs(tcp_header->dest);
-		//We only deal with our experiment traffic: TCP source port or destination port = 5001
-		if(src_port==5001||dst_port==5001)
+		//Update existing Flow entry's information. Note that direction has been changed.
+		Init_Flow(&f);
+		f.local_ip=ip_header->daddr;
+		f.remote_ip=ip_header->saddr;
+		f.local_port=ntohs(tcp_header->dest);
+		f.remote_port=ntohs(tcp_header->source);
+		//Update existing Flow entry's information
+		spin_lock_irqsave(&(ft.tableLock),flags);
+		info_pointer=Search_Table(&ft,&f);
+		if(info_pointer!=NULL)
 		{
-			//Update existing Flow entry's information. Note that direction has been changed.
-			Init_Flow(&f);
-			f.local_ip=ip_header->daddr;
-			f.remote_ip=ip_header->saddr;
-			f.local_port=dst_port;
-			f.remote_port=src_port;
-			//TCP SYN packet, a new  initialized outgoing connection
-			if(tcp_header->syn&&!tcp_header->ack) 
+			ack=ntohl(tcp_header->ack);
+			if(is_seq_larger(ack,info_pointer->latest_ack)==1)
 			{
-				//A new Flow entry should be inserted into FlowTable
-				spin_lock_irqsave(&globalLock,flags);
-				if(Insert_Table(&ft,&f)==0)
-				{
-					printk(KERN_INFO "Insert fail\n");
-				}
-				else
-				{
-					printk(KERN_INFO "Insert succeed\n");
-				}
-				spin_unlock_irqrestore(&globalLock,flags);
-			}
-			else
-			{
-				//spin_lock_irqsave(&globalLock,flags);
-				info_pointer=Search_Table(&ft,&f);
-				//spin_unlock_irqrestore(&globalLock,flags);
-				if(info_pointer!=NULL)
-				{
-					//TCP payload length=Total length - IP header length-TCP header length
-					payload_len=skb->len-(ip_header->ihl<<2)-(unsigned int)(tcp_header->doff*4);
-					if(payload_len>0)
-						info_pointer->last_update_time=get_tsval();
-				}
+				info_pointer->latest_ack=ack;
 			}
 		}
+		spin_unlock_irqrestore(&(ft.tableLock),flags);
 	}
 	return NF_ACCEPT;
-}*/
+}
 
 //Called when module loaded using 'insmod'
 int init_module()
