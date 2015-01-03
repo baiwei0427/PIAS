@@ -11,13 +11,13 @@
 //timeouts: the number of consecutive timeouts experienced by outgoing traffic
 struct Information 
 {
-	unsigned int latest_update_time; 	
-	unsigned int latest_timeout_time;
-	unsigned int latest_timeout_seq;
-	unsigned int latest_seq;
-	unsigned int latest_ack;
-	unsigned int bytes_sent;
-	unsigned int timeouts;
+	ktime_t latest_update_time; 	
+	ktime_t latest_timeout_time;
+	u32 latest_timeout_seq;
+	u32 latest_seq;
+	u32 latest_ack;
+	u32 bytes_sent;
+	u32 timeouts;
 	//0 is the highest priority 
 	//unsigned int priority;
 }; 
@@ -26,10 +26,10 @@ struct Information
 //A TCP flow is defined by 4-tuple <local_ip,remote_ip,local_port,remote_port> and its related information
 struct Flow
 {	
-	unsigned int remote_ip;
-	unsigned int local_ip;
-	unsigned short int remote_port;
-	unsigned short int local_port;
+	u32 remote_ip;
+	u32 local_ip;
+	u16 remote_port;
+	u16 local_port;
 	struct Information info; 
 };
 

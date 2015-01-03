@@ -5,9 +5,9 @@
 #include <linux/time.h>  
 
 //Function to calculate microsecond-granularity TCP timestamp value 
-static unsigned int get_tsval(void)
+static u32 get_tsval(void)
 {	
-	return (unsigned int)(ktime_to_ns(ktime_get())>>10);
+	return (u32)(ktime_to_ns(ktime_get())>>10);
 }
 
 static void enable_ecn_dscp(struct sk_buff *skb, u8 dscp)
@@ -203,11 +203,11 @@ static unsigned int tcp_modify_outgoing(struct sk_buff *skb, unsigned int win, u
 	return 1;
 }
 
-//Maximum 32-bit integer value: 4294967295
+//Maximum unsigned 32-bit integer value: 4294967295
 //Function: determine whether seq1 is larger than seq2
 //If Yes, return 1. Else, return 0.
 //We use a simple heuristic to handle wrapped TCP sequence number 
-static unsigned short int is_seq_larger(unsigned int seq1, unsigned int seq2)
+static u8 is_seq_larger(u32 seq1, u32 seq2)
 {
     if(likely(seq1>seq2&&seq1-seq2<=4294900000))
 	{
@@ -223,7 +223,7 @@ static unsigned short int is_seq_larger(unsigned int seq1, unsigned int seq2)
 	}
 }
 
-static unsigned int seq_gap(unsigned int seq1, unsigned int seq2)
+static u32 seq_gap(u32 seq1, u32 seq2)
 {
     if(likely(seq1>=seq2))
         return seq1-seq2;

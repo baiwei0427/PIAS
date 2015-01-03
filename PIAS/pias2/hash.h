@@ -45,15 +45,15 @@ static void Print_Flow(struct Flow* f, int type)
 	
 	if(type==0) //Insert
 	{
-		printk(KERN_INFO "Insert a Flow record <%s:%hu , %s:%hu> \n",local_ip,f->local_port,remote_ip,f->remote_port);
+		printk(KERN_INFO "Insert a Flow record <%s:%hu , %s:%hu> \n",local_ip,(unsigned short int)(f->local_port),remote_ip,(unsigned short int)(f->remote_port));
 	}
 	else if(type==1) //Delete
 	{
-		printk(KERN_INFO "Delete a Flow record <%s:%hu , %s:%hu >\n",local_ip,f->local_port,remote_ip,f->remote_port);
+		printk(KERN_INFO "Delete a Flow record <%s:%hu , %s:%hu >\n",local_ip,(unsigned short int)(f->local_port),remote_ip,(unsigned short int)(f->remote_port));
 	}
 	else //Otherwise
 	{
-		printk(KERN_INFO "Flow record <%s:%hu , %s:%hu > \n",local_ip,f->local_port,remote_ip,f->remote_port);
+		printk(KERN_INFO "Flow record <%s:%hu , %s:%hu > \n",local_ip,(unsigned short int)(f->local_port),remote_ip,(unsigned short int)(f->remote_port));
 	}
 }
 
@@ -75,8 +75,8 @@ static int Equal(struct Flow* f1,struct Flow* f2)
 //Initialize a TCP flow information entry
 static void Init_Information(struct Information* info)
 {
-	info->latest_update_time=0;
-	info->latest_timeout_time=0;
+	info->latest_update_time=ktime_set(0,0);
+	info->latest_timeout_time=ktime_set(0,0);
 	info->latest_timeout_seq=0;
 	info->latest_seq=0;
 	info->latest_ack=0;
@@ -271,9 +271,10 @@ static struct Information* Search_Table(struct FlowTable* ft, struct Flow* f)
 //Delete a given Flow entry from FlowList
 //If the Flow entry is successfully deleted, return bytes sent (if bytes sent=0, return 1)
 //Else, return 0
-static unsigned int Delete_List(struct FlowList* fl, struct Flow* f)
+static u32 Delete_List(struct FlowList* fl, struct Flow* f)
 {
-	unsigned int result=0;
+	u32 result=0;
+	struct FlowNode* s=NULL;
 	//No node in current FlowList
 	if(fl->len==0) 
 	{
@@ -298,7 +299,7 @@ static unsigned int Delete_List(struct FlowList* fl, struct Flow* f)
 				result=tmp->next->f.info.bytes_sent;
 				if(result==0)
 					result=1;
-				struct FlowNode* s=tmp->next;
+				s=tmp->next;
 				tmp->next=s->next;
 				//Delete matching FlowNode from this FlowList
 				kfree(s);
@@ -320,9 +321,9 @@ static unsigned int Delete_List(struct FlowList* fl, struct Flow* f)
 
 //Delete a given Flow entry from FlowTable
 //If success, return 1. Else, return 0
-static unsigned int Delete_Table(struct FlowTable* ft,struct Flow* f)
+static u32 Delete_Table(struct FlowTable* ft,struct Flow* f)
 {
-	unsigned int result=0;
+	u32 result=0;
 	unsigned int index=0;
 	index=Hash(f);
 	//Delete Flow from appropriate FlowList based on Hash value

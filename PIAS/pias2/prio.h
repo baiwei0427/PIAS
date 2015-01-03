@@ -3,7 +3,7 @@
 
 //Input: bytes sent (Note that size<0 denotes that no such flow entry or last few packets)
 //Output: DSCP
-static u8 priority(unsigned int size)
+static u8 priority(u32 size)
 {
 	//For Web Search, it's 965816 
 	/*if(size<=965816)

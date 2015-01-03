@@ -56,11 +56,11 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 	struct Flow f;	//Flow structure
 	struct Information* info_pointer=NULL;	//Pointer to structure Information
 	unsigned long flags;	//variable for save current states of irq
-	unsigned int dscp;	//DSCP value
-	unsigned int payload_len;	//TCP payload length
-	unsigned int seq;	//TCP sequence number
-	unsigned int result;	//Delete_Table return result
-	unsigned int now;	//current time
+	u8 dscp;	//DSCP value
+	u16 payload_len;	//TCP payload length
+	u32 seq;	//TCP sequence number
+	u32 result;	//Delete_Table return result
+	ktime_t now;	//current time
 	
 	if(!out)
         return NF_ACCEPT;
@@ -79,13 +79,13 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 	//TCP
 	if(ip_header->protocol==IPPROTO_TCP) 
 	{
-		now=get_tsval();
+		now=ktime_get();
 		tcp_header = (struct tcphdr *)((__u32 *)ip_header+ ip_header->ihl);
 		Init_Flow(&f);
 		f.local_ip=ip_header->saddr;
 		f.remote_ip=ip_header->daddr;
-		f.local_port=ntohs(tcp_header->source);
-		f.remote_port=ntohs(tcp_header->dest);
+		f.local_port=(u16)ntohs(tcp_header->source);
+		f.remote_port=(u16)ntohs(tcp_header->dest);
 		//TCP SYN packet, a new  connection
 		if(tcp_header->syn) 
 		{
@@ -126,7 +126,7 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 			if(info_pointer!=NULL)
 			{
 				//TCP payload length=Total IP length - IP header length-TCP header length
-				payload_len=(unsigned int)ntohs(ip_header->tot_len)-(ip_header->ihl<<2)-(tcp_header->doff<<2);       
+				payload_len=ntohs(ip_header->tot_len)-(ip_header->ihl<<2)-(tcp_header->doff<<2);       
 				seq=ntohl(tcp_header->seq);
 				if(payload_len>=1)
 					seq=seq+payload_len-1;
@@ -142,9 +142,9 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 				else
 				{
 					//TCP timeout
-					if(now-info_pointer->latest_update_time>=RTO_MIN)
+					if(ktime_us_delta(now,info_pointer->latest_update_time)>=RTO_MIN&&is_seq_larger(info_pointer->latest_seq,info_pointer->latest_ack)==1)
 					{
-						printk(KERN_INFO "TCP timeout is detected with RTO of %u",now-info_pointer->latest_update_time); 
+						printk(KERN_INFO "TCP timeout is detected with RTO of %u",(unsigned int)ktime_us_delta(now,info_pointer->latest_update_time)); 
 						//It's a 'consecutive' TCP timeout? 
 						if(seq_gap(seq,info_pointer->latest_timeout_seq)<=5*1448||seq_gap(info_pointer->latest_timeout_seq,seq)<=5*1448)
 						{
@@ -189,7 +189,7 @@ static unsigned int hook_func_in(unsigned int hooknum, struct sk_buff *skb, cons
 	struct tcphdr *tcp_header=NULL;	//TCP header structure
 	struct Flow f;	//Flow structure
 	struct Information* info_pointer=NULL;	//Pointer to structure Information
-	unsigned int ack;
+	u32 ack;
 	unsigned long flags;	//variable for save current states of irq
 
 	if(!in)
@@ -214,14 +214,14 @@ static unsigned int hook_func_in(unsigned int hooknum, struct sk_buff *skb, cons
 		Init_Flow(&f);
 		f.local_ip=ip_header->daddr;
 		f.remote_ip=ip_header->saddr;
-		f.local_port=ntohs(tcp_header->dest);
-		f.remote_port=ntohs(tcp_header->source);
+		f.local_port=(u16)ntohs(tcp_header->dest);
+		f.remote_port=(u16)ntohs(tcp_header->source);
 		//Update existing Flow entry's information
 		spin_lock_irqsave(&(ft.tableLock),flags);
 		info_pointer=Search_Table(&ft,&f);
 		if(info_pointer!=NULL)
 		{
-			ack=ntohl(tcp_header->ack);
+			ack=(u32)ntohl(tcp_header->ack);
 			if(is_seq_larger(ack,info_pointer->latest_ack)==1)
 			{
 				info_pointer->latest_ack=ack;
