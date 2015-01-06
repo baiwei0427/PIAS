@@ -179,7 +179,7 @@ static unsigned int Insert_List(struct FlowList* fl, struct Flow* f)
 				}
 				else
 				{
-					Print_Flow(f,0);
+					//Print_Flow(f,0);
 					tmp->next=buf;
 					//Copy data for this new FlowNode
 					tmp->next->f=*f;

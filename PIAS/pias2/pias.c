@@ -144,9 +144,9 @@ static unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, con
 					//TCP timeout
 					if(ktime_us_delta(now,info_pointer->latest_update_time)>=RTO_MIN&&is_seq_larger(info_pointer->latest_seq,info_pointer->latest_ack)==1)
 					{
-						printk(KERN_INFO "TCP timeout is detected with RTO of %u",(unsigned int)ktime_us_delta(now,info_pointer->latest_update_time)); 
+						printk(KERN_INFO "TCP timeout is detected with RTO = %u and bytes sent = %u",(unsigned int)ktime_us_delta(now,info_pointer->latest_update_time),(unsigned int)(info_pointer->bytes_sent)); 
 						//It's a 'consecutive' TCP timeout? 
-						if(seq_gap(seq,info_pointer->latest_timeout_seq)<=5*1448||seq_gap(info_pointer->latest_timeout_seq,seq)<=5*1448)
+						if(TIMEOUT_THRESH==1||(TIMEOUT_THRESH>=2&&seq_gap(seq,info_pointer->latest_timeout_seq)<=5*1448||seq_gap(info_pointer->latest_timeout_seq,seq)<=5*1448))
 						{
 							info_pointer->timeouts++;
 							//Fixed threshold of consecutive TCP timeouts

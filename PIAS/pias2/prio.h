@@ -66,9 +66,9 @@ static u8 priority(u32 size)
 	else
 		return 0;*/
 	//For Web search with eight queues (optimal), our thresholds are  65KB  1491KB  2257KB  2814KB 2880KB 2896KB 3000KB
-	/*if(size<=65*1024)
+	if(size<=65*1024)
 		return 7;
-	else if(size<=1491*1024)
+	/*else if(size<=1491*1024)
 		return 6;
 	else if(size<=2257*1024)
 		return 5;
@@ -79,13 +79,13 @@ static u8 priority(u32 size)
 	else if(size<=2896*1024)
 		return 2;
 	else if (size<=3000*1024)
+		return 1;*/
+	else 
+		return 0;
+	//For static flow experiment, the right threshold is 20KB 
+	/*if(size<=20*1024)
 		return 1;
 	else 
 		return 0;*/
-	//For static flow experiment, the right threshold is 20KB 
-	if(size<=20*1024)
-		return 1;
-	else 
-		return 0;
 }
 #endif
