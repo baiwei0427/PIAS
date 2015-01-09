@@ -1,3 +1,6 @@
+#include <linux/vmalloc.h>
+#include <linux/slab.h>
+
 #include "flow.h"
 #include "params.h"
 
@@ -32,7 +35,7 @@ void MCP_Print_Node(struct MCP_Flow_Node* fn)
 }
 
 //Print a FlowList
-void MCP_Print_List(struct MCP_Flow_List* fl);
+void MCP_Print_List(struct MCP_Flow_List* fl)
 {		
 	struct MCP_Flow_Node* Ptr;
 	for(Ptr=fl->head->next;Ptr!=NULL;Ptr=Ptr->next)
@@ -51,7 +54,7 @@ void MCP_Print_Table(struct MCP_Flow_Table* ft)
 		if(ft->table[i].len>0)
         {
 			printk(KERN_INFO "FlowList %d\n",i);
-			Print_List(&(ft->table[i]));
+			MCP_Print_List(&(ft->table[i]));
         }
     }
 	printk(KERN_INFO "There are %u flows in total\n",ft->size);
@@ -69,7 +72,7 @@ unsigned int MCP_Hash(struct MCP_Flow* f)
 
 //Determine whether two Flows are equal 
 //<local_ip, remote_ip, local_port, remote_port> determines a flow
-unsigned int MCP_Equal(struct Flow* f1,struct Flow* f2)
+unsigned int MCP_Equal(struct MCP_Flow* f1,struct MCP_Flow* f2)
 {
 	return ((f1->local_ip==f2->local_ip)
 	&&(f1->remote_ip==f2->remote_ip)
@@ -84,6 +87,7 @@ void MCP_Init_Info(struct MCP_Flow_Info* info)
 	info->bytes_received=0;
 	info->bytes_total=0;
 	info->window=0;
+	info->scale=0;
 	info->srtt=0;
 	info->bytes_rtt_received=0;
 	info->bytes_rtt_received_ecn=0;
@@ -154,6 +158,8 @@ void MCP_Init_Table(struct MCP_Flow_Table* ft)
 	}
 	//No nodes in current table
 	ft->size=0;
+	//Init spinlock
+	spin_lock_init(&(ft->tableLock));
 }
 
 //Insert a Flow into a FlowList and return 1 if it succeeds
@@ -213,7 +219,7 @@ unsigned int MCP_Insert_List(struct MCP_Flow_List* fl, struct MCP_Flow* f, int f
 unsigned int MCP_Insert_Table(struct MCP_Flow_Table* ft,struct MCP_Flow* f, int flags)
 {
 	unsigned int result=0;
-	unsigned int index=Hash(f);
+	unsigned int index=MCP_Hash(f);
 	
 	//printk(KERN_INFO "Insert to link list %d\n",index);
 	//Insert Flow to appropriate FlowList based on Hash value
@@ -260,12 +266,101 @@ struct MCP_Flow_Info* MCP_Search_List(struct MCP_Flow_List* fl, struct MCP_Flow*
 }
 
 //Search the information for a given Flow in a FlowTable
-struct MCP_Flow_Info*MCP_ Search_Table(struct MCP_Flow_Table* ft, struct MCP_Flow* f)
+struct MCP_Flow_Info* MCP_Search_Table(struct MCP_Flow_Table* ft, struct MCP_Flow* f)
 {
 	unsigned int index=0;
-	index=Hash(f);
+	index=MCP_Hash(f);
 	return MCP_Search_List(&(ft->table[index]),f);
 }
 
+//Delete a Flow from FlowList and return the window (>0) of this flow if it succeeds
+u32 MCP_Delete_List(struct MCP_Flow_List* fl, struct MCP_Flow* f)
+{
+	u32 result=0;
+	//No node in current FlowList
+	if(fl->len==0) 
+	{
+		//printk(KERN_INFO "No node in current list\n");
+		return 0;
+	}
+	else 
+	{
+		struct MCP_Flow_Node* tmp=fl->head;
+		struct MCP_Flow_Node* s=NULL;
 
+		while(1)	
+		{
+			//If pointer to next node is NULL, we find the tail of this FlowList, no more FlowNodes, return 0
+			if(tmp->next==NULL) 
+			{
+				//printk(KERN_INFO "There are %d flows in this list\n",fl->len);
+				return 0;
+			}
+			//Find the matching flow (matching FlowNode is tmp->next rather than tmp), delete flow and return
+			else if(MCP_Equal(&(tmp->next->f),f)==1) 
+			{
+				//Get rwnd 
+				result=tmp->next->f.info.window;
+				 s=tmp->next;
+				//Print_Flow(&(tmp->next->f),2);
+				tmp->next=s->next;
+				//Delete matching FlowNode from this FlowList
+				kfree(s);
+				//Reduce the length of this FlowList by one
+				fl->len--;
+				//printk(KERN_INFO "Delete a flow record\n");
+				return result;
+			}
+			//Unmatch
+			else 
+			{
+				//Move to next FlowNode
+				tmp=tmp->next;
+			}
+		}
+		return 0;
+	}
+}
+
+//Delete a Flow from FlowTable and return the window (>0) of this flow if it succeeds
+u32 MCP_Delete_Table(struct MCP_Flow_Table* ft,struct MCP_Flow* f)
+{
+	u32 result=0;
+	unsigned int index=0;
+	index=MCP_Hash(f);
+	//printk(KERN_INFO "Delete from link list %d\n",index);
+	//Delete Flow from appropriate FlowList based on Hash value
+	result=MCP_Delete_List(&(ft->table[index]),f);
+	//Reduce the size of FlowTable by one
+	if(result>0)
+		ft->size-=1;
+	//printk(KERN_INFO "Delete %d \n",result);
+	return result;
+}
+
+void MCP_Empty_List(struct MCP_Flow_List* fl)
+{
+	struct MCP_Flow_Node* NextNode;
+	struct MCP_Flow_Node* Ptr;
+	for(Ptr=fl->head;Ptr!=NULL;Ptr=NextNode)
+	{
+		NextNode=Ptr->next;
+		//Actually, we delete the fl->head in the first iteration
+		//For fl->head, we use vfree. For other nodes, we use kfree
+		if(Ptr==fl->head)
+			vfree(Ptr);
+		else
+			kfree(Ptr);
+	}
+}
+
+void MCP_Empty_Table(struct MCP_Flow_Table* ft)
+{
+	int i=0;
+	for(i=0;i<MCP_HASH_RANGE;i++)
+	{
+		MCP_Empty_List(&(ft->table[i]));
+	}
+	vfree(ft->table);
+}
 

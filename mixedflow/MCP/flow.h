@@ -8,7 +8,8 @@
  *	latest_seq: the latest sequence number of this flow
  *	bytes_received: the number of bytes that have been received (should exclude retranmission)
  * bytes_total: the total number of bytes of this flow
- *	window: the window size (bytes) of this flow
+ *	window: the window size (MSS) of this flow
+ * scale: TCP window scale
  *	srtt: the smoothed RTT value (us)
  *	bytes_received_rtt: the number of bytes that have been received in this RTT
  * bytes_received_ecn_rtt: he number of bytes that have been received and marked with ECN in this RTT 
@@ -20,7 +21,8 @@ struct MCP_Flow_Info
 	u32 latest_seq;
 	u32 bytes_received;
 	u32 bytes_total;
-	u32	window;
+	u16	window;
+	u16 scale;
 	u32 srtt;
 	u32 bytes_rtt_received;
 	u32 bytes_rtt_received_ecn;
@@ -58,6 +60,7 @@ struct MCP_Flow_Table
 {
 	struct MCP_Flow_List* table;	//many FlowList (HASH_RANGE)
 	unsigned int size;	//total number of nodes in this table
+	spinlock_t tableLock;
 };
 
 //Print functions
@@ -67,7 +70,7 @@ void MCP_Print_List(struct MCP_Flow_List* fl);
 void MCP_Print_Table(struct MCP_Flow_Table* ft);
 
 unsigned int MCP_Hash(struct MCP_Flow* f);
-unsigned int MCP_Equal(struct Flow* f1,struct Flow* f2);
+unsigned int MCP_Equal(struct MCP_Flow* f1,struct MCP_Flow* f2);
 
 //Initialization functions
 void MCP_Init_Info(struct MCP_Flow_Info* info);
@@ -85,8 +88,8 @@ struct MCP_Flow_Info* MCP_Search_List(struct MCP_Flow_List* fl, struct MCP_Flow*
 struct MCP_Flow_Info* MCP_Search_Table(struct MCP_Flow_Table* ft, struct MCP_Flow* f);
 
 //Delete functions
-unsigned int MCP_Delete_List(struct MCP_Flow_List* fl, struct MCP_Flow* f);
-unsigned int MCP_Delete_Table(struct MCP_Flow_Table* ft,struct MCP_Flow* f);
+u32 MCP_Delete_List(struct MCP_Flow_List* fl, struct MCP_Flow* f);
+u32 MCP_Delete_Table(struct MCP_Flow_Table* ft,struct MCP_Flow* f);
 
 //Empty functions
 void MCP_Empty_List(struct MCP_Flow_List* fl);
