@@ -1,6 +1,6 @@
 #include <linux/ip.h>
 #include <linux/tcp.h>
-
+#include <net/dsfield.h>
 #include "network.h"
 
 //Calculate microsecond-granularity TCP timestamp value 
@@ -9,7 +9,20 @@ inline u32 get_tsval(void)
 	return (u32)(ktime_to_ns(ktime_get())>>10);
 }
 
-//Function:  get TCP window scale shift count from SYN packets and return 1 by default
+//Clear ECN marking
+inline void clear_ecn(struct sk_buff *skb)
+{
+	struct iphdr *iph=ip_hdr(skb);
+	if(likely(iph!=NULL))
+	{
+		if(skb_make_writable(skb, sizeof(struct iphdr)))
+		{
+			ipv4_change_dsfield(iph, 0xff, iph->tos & ~0x3);
+		}
+	}
+}
+
+//Function:  get TCP window scale shift count from SYN packets and return 0 by default
 u8 tcp_get_scale(struct sk_buff *skb)
 {
 	struct iphdr *ip_header=NULL;	//IP  header structure
@@ -61,8 +74,8 @@ u8 tcp_get_scale(struct sk_buff *skb)
 			tcp_opt=tcp_opt+1+(tcp_opt_value-2);
 		}
 	}
-	//By default, shift count=1
-	return 1;
+	//By default, shift count=0
+	return 0;
 }
 
 //Modify incoming TCP packets and return RTT sample value
@@ -175,8 +188,8 @@ u8 tcp_modify_outgoing(struct sk_buff *skb, u16 win, u32 time)
 		return 0;
 	}
 	
-	//Modify TCP window. Note that TCP received window should be no larger than 65535 bytes.
-    if(win<=65535)
+	//Modify TCP window. Note that TCP received window should be in (0,65535].
+    if(win<=65535&&win>0)
         tcp_header->window=htons(win);
 
 	//TCP option offset=IP header pointer+IP header length+TCP header length
@@ -227,4 +240,24 @@ u8 tcp_modify_outgoing(struct sk_buff *skb, u16 win, u32 time)
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	
 	return 1;
+}
+
+//Maximum unsigned 32-bit integer value: 4294967295
+//Function: determine whether seq1 is larger than seq2
+//If Yes, return 1. Else, return 0.
+//We use a simple heuristic to handle wrapped TCP sequence number 
+inline u8 is_seq_larger(u32 seq1, u32 seq2)
+{
+    if(likely(seq1>seq2&&seq1-seq2<=4294900000))
+	{
+		return 1;
+	}
+	else if(seq1<seq2&&seq2-seq1>4294900000)
+	{
+		return 1;
+	}
+	else
+	{
+		return 0;
+	}
 }

@@ -88,8 +88,8 @@ struct MCP_Flow_Info* MCP_Search_List(struct MCP_Flow_List* fl, struct MCP_Flow*
 struct MCP_Flow_Info* MCP_Search_Table(struct MCP_Flow_Table* ft, struct MCP_Flow* f);
 
 //Delete functions
-u32 MCP_Delete_List(struct MCP_Flow_List* fl, struct MCP_Flow* f);
-u32 MCP_Delete_Table(struct MCP_Flow_Table* ft,struct MCP_Flow* f);
+u16 MCP_Delete_List(struct MCP_Flow_List* fl, struct MCP_Flow* f);
+u16 MCP_Delete_Table(struct MCP_Flow_Table* ft,struct MCP_Flow* f);
 
 //Empty functions
 void MCP_Empty_List(struct MCP_Flow_List* fl);

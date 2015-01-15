@@ -15,6 +15,8 @@ extern const unsigned int MCP_INIT_WIN;
 extern const unsigned int MCP_HASH_RANGE;
 //Maximum size of a list
 extern const unsigned int MCP_LIST_SIZE;
+//parameter to smooth RTT: srtt=rtt_smooth/1000*srtt+(1000-rtt_smooth)/1000*rtt
+extern const unsigned int MCP_RTT_SMOOTH;
 
 
 #endif

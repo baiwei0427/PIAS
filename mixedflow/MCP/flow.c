@@ -274,9 +274,9 @@ struct MCP_Flow_Info* MCP_Search_Table(struct MCP_Flow_Table* ft, struct MCP_Flo
 }
 
 //Delete a Flow from FlowList and return the window (>0) of this flow if it succeeds
-u32 MCP_Delete_List(struct MCP_Flow_List* fl, struct MCP_Flow* f)
+u16 MCP_Delete_List(struct MCP_Flow_List* fl, struct MCP_Flow* f)
 {
-	u32 result=0;
+	u16 result=0;
 	//No node in current FlowList
 	if(fl->len==0) 
 	{
@@ -323,9 +323,9 @@ u32 MCP_Delete_List(struct MCP_Flow_List* fl, struct MCP_Flow* f)
 }
 
 //Delete a Flow from FlowTable and return the window (>0) of this flow if it succeeds
-u32 MCP_Delete_Table(struct MCP_Flow_Table* ft,struct MCP_Flow* f)
+u16 MCP_Delete_Table(struct MCP_Flow_Table* ft,struct MCP_Flow* f)
 {
-	u32 result=0;
+	u16 result=0;
 	unsigned int index=0;
 	index=MCP_Hash(f);
 	//printk(KERN_INFO "Delete from link list %d\n",index);
