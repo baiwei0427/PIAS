@@ -40,7 +40,8 @@ static unsigned int MCP_hook_func_out(unsigned int hooknum, struct sk_buff *skb,
 	struct MCP_Flow f;
 	unsigned long flags;
 	struct MCP_Flow_Info* infoPtr=NULL;
-	u16 window=0;
+	u32 window=0;
+	u32 deadline=0;
 	u32 delta_in_us=0;
 	ktime_t now=ktime_get();
 	
@@ -59,7 +60,7 @@ static unsigned int MCP_hook_func_out(unsigned int hooknum, struct sk_buff *skb,
 	//MCP packets
 	if(iph->protocol==IPPROTO_TCP&&skb->mark>0) 
 	{
-		tcph=(struct tcphdr *)((__u32 *)iph+ iph->ihl);
+		tcph=(struct tcphdr *)((__u32 *)iph+iph->ihl);
 		f.local_ip=iph->saddr;
 		f.remote_ip=iph->daddr;
 		f.local_port=ntohs(tcph->source);
@@ -68,52 +69,56 @@ static unsigned int MCP_hook_func_out(unsigned int hooknum, struct sk_buff *skb,
 		
 		if(tcph->syn)
 		{
-			//Get data size
-			f.info.bytes_total=(skb->mark)%(1024*1024);
+			//Get data size (KB to B)
+			f.info.bytes_total=((skb->mark)&0x000fffff)<<10;
 			f.info.last_update=now;
-			//Get deadline time (ms)
-			u32 deadline=(skb->mark);
-			//printk(KERN_INFO "The deadline time is %u ms",deadline);
-			//ms to ns
-			f.info.deadline.tv64=now.tv64+(deadline<<20);
+			//Get deadline time (ms to ns)
+			deadline=(skb->mark)&0xfff00000;
+			f.info.deadline.tv64=now.tv64+deadline;
 			f.info.scale=(1<<tcp_get_scale(skb));
 			f.info.window=MCP_INIT_WIN;
 			f.info.srtt= MCP_INIT_RTT;
+			//For test
+			//printk(KERN_INFO "Flow size is %u bytes. Deadline is %u ms. Window scale is %hu.\n",f.info.bytes_total,deadline>>20,f.info.scale);
 			//Insert MCP flow entry
 			spin_lock_irqsave(&(ft.tableLock),flags);
 			if(MCP_Insert_Table(&ft,&f,GFP_ATOMIC)==0)
+			{
 				printk(KERN_INFO "Insert fails\n");
+			}
 			spin_unlock_irqrestore(&(ft.tableLock),flags);
-			tcp_modify_outgoing(skb,f.info.window*MCP_MSS, get_tsval());
+			tcp_modify_outgoing(skb,f.info.window*MCP_TCP_MSS, get_tsval());
 		}
 		else
 		{
 			infoPtr=MCP_Search_Table(&ft,&f);
 			if(infoPtr!=NULL)
 			{
+				spin_lock_irqsave(&(ft.tableLock),flags);
 				infoPtr->last_update=now;
 				delta_in_us=ktime_us_delta(infoPtr->deadline,now);
 				if(delta_in_us>0)
 				{
 					//Calculate window needed to meet flow ddl
-					window=(infoPtr->bytes_total-infoPtr->bytes_received)*infoPtr->srtt/delta_in_us;
-					if(window>infoPtr->window*MCP_MSS)
+					window=(infoPtr->bytes_total-infoPtr->bytes_received)*infoPtr->srtt/delta_in_us*MCP_ETHERNET_PKT_LEN/ MCP_TCP_PAYLOAD_LEN;
+					if(window>infoPtr->window*MCP_TCP_MSS)
 					{
 						infoPtr->window+=1;
 					}
-					else if(window<=(infoPtr->window-1)*MCP_MSS)
+					else if(window<=(infoPtr->window-1)*MCP_TCP_MSS)
 					{
 						infoPtr->window=max(infoPtr->window-1,MCP_INIT_WIN);
 					}
-					tcp_modify_outgoing(skb,(infoPtr->window*MCP_MSS+infoPtr->scale/2)/infoPtr->scale, get_tsval());
 				}
 				//Deadline has been missed (now>ddl)
 				else
 				{
 					//We should set minimal window to this flow
 					infoPtr->window=max(infoPtr->window-1,MCP_INIT_WIN);
-					tcp_modify_outgoing(skb,(infoPtr->window*MCP_MSS+infoPtr->scale/2)/infoPtr->scale, get_tsval());
 				}
+				spin_unlock_irqrestore(&(ft.tableLock),flags);
+				//printk(KERN_INFO "Window is %u MSS\n",infoPtr->window);
+				tcp_modify_outgoing(skb,infoPtr->window*MCP_TCP_MSS/infoPtr->scale+1, get_tsval());
 			}
 		}
 	}
@@ -133,7 +138,7 @@ static unsigned int MCP_hook_func_in(unsigned int hooknum, struct sk_buff *skb, 
 	u32 seq=0;
 	u16 payloadLen=0;	//TCP payload length
 	struct MCP_Flow_Info* infoPtr=NULL;
-	ktime_t now=ktime_get();
+	//ktime_t now=ktime_get();
 	
 	if(!in)
 		return NF_ACCEPT;
@@ -141,7 +146,13 @@ static unsigned int MCP_hook_func_in(unsigned int hooknum, struct sk_buff *skb, 
 	if(strncmp(in->name,param_dev,IFNAMSIZ)!=0)
 		return NF_ACCEPT;
 	
-	if(iph->protocol==IPPROTO_TCP) 
+	iph=(struct iphdr *)skb_network_header(skb);
+	
+	//The packet is not ip packet (e.g. ARP or others)
+	if (unlikely(iph==NULL))
+		return NF_ACCEPT;
+		
+	if(likely(iph->protocol==IPPROTO_TCP)) 
 	{
 		tcph=(struct tcphdr *)((__u32 *)iph+ iph->ihl);
 		f.local_ip=iph->daddr;
@@ -157,7 +168,8 @@ static unsigned int MCP_hook_func_in(unsigned int hooknum, struct sk_buff *skb, 
 			spin_unlock_irqrestore(&(ft.tableLock),flags);
 			if(result>0)
 			{
-				tcp_modify_incoming(skb);
+				tcp_modify_incoming(skb,(__u32)(jiffies));
+				clear_ecn(skb);
 			}
 		}
 		else
@@ -165,23 +177,27 @@ static unsigned int MCP_hook_func_in(unsigned int hooknum, struct sk_buff *skb, 
 			infoPtr=MCP_Search_Table(&ft,&f);
 			if(infoPtr!=NULL)
 			{
-				//Update smooth RTT
-				rtt=tcp_modify_incoming(skb);
-				spin_lock_irqsave(&(ft.tableLock),flags);
-				infoPtr->last_update=now;
-				infoPtr->srtt=(MCP_RTT_SMOOTH*infoPtr->srtt+(1000-MCP_RTT_SMOOTH)*rtt)/1000;
-				
-				//Update received data and sequence number 
+				//printk(KERN_INFO "Flow entry exists\n");
+				//Get sample RTT 
+				rtt=max(tcp_modify_incoming(skb,(__u32)(jiffies)),MCP_INIT_RTT);
+				//printk(KERN_INFO "RTT is %u us\n",rtt);
 				payloadLen=ntohs(iph->tot_len)-(iph->ihl<<2)-(tcph->doff<<2);
 				seq=ntohl(tcph->seq);
 				if(payloadLen>=1)
 					seq=seq+payloadLen-1;
+				
+				spin_lock_irqsave(&(ft.tableLock),flags);
+				//Update smooth RTT
+				infoPtr->srtt=(MCP_RTT_SMOOTH*infoPtr->srtt+(1000-MCP_RTT_SMOOTH)*rtt)/1000;
+				//Update received data and sequence number 
 				if(is_seq_larger(seq,infoPtr->latest_seq)>0)
 				{
 					infoPtr->latest_seq=seq;
 					infoPtr->bytes_received=min(infoPtr->bytes_received+payloadLen,infoPtr->bytes_total);
 				}
 				spin_unlock_irqrestore(&(ft.tableLock),flags);
+				//Clear ECN marking for MCP flows
+				clear_ecn(skb);
 			}
 		}
 	}
@@ -226,7 +242,7 @@ int init_module()
 	MCP_nf_hook_in.hooknum=NF_INET_PRE_ROUTING;			
 	MCP_nf_hook_in.pf=PF_INET;							                          
 	MCP_nf_hook_in.priority=NF_IP_PRI_FIRST;			              
-	nf_register_hook(&MCP_nf_hook_in);				                   
+	nf_register_hook(&MCP_nf_hook_in);		                   
 	
 	printk(KERN_INFO "Start MCP kernel module on %s\n", param_dev);
 

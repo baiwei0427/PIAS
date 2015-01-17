@@ -7,7 +7,7 @@
 inline u32 get_tsval(void);
 inline void clear_ecn(struct sk_buff *skb);
 u8 tcp_get_scale(struct sk_buff *skb);
-u32 tcp_modify_incoming(struct  sk_buff *skb);
+u32 tcp_modify_incoming(struct  sk_buff *skb, u32 time);
 u8 tcp_modify_outgoing(struct sk_buff *skb, u16 win, u32 time);
 inline u8 is_seq_larger(u32 seq1, u32 seq2);
 

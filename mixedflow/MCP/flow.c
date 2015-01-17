@@ -64,10 +64,7 @@ void MCP_Print_Table(struct MCP_Flow_Table* ft)
 unsigned int MCP_Hash(struct MCP_Flow* f)
 {		
 	//return a value in [0,HASH_RANGE-1]
-	return ((f->local_ip/(256*256*256)+1)*
-	(f->remote_ip/(256*256*256)+1)*
-	(f->local_port+1)*
-	(f->remote_port+1))%MCP_HASH_RANGE;
+	return ((f->local_ip/(256*256*256)+1)*(f->remote_ip/(256*256*256)+1)*(f->local_port+1)*(f->remote_port+1))%MCP_HASH_RANGE;
 }
 
 //Determine whether two Flows are equal 

@@ -1,5 +1,6 @@
 #include <linux/ip.h>
 #include <linux/tcp.h>
+#include <linux/jiffies.h>
 #include <net/dsfield.h>
 #include "network.h"
 
@@ -54,12 +55,12 @@ u8 tcp_get_scale(struct sk_buff *skb)
 		//Get value of current byte
 		tcp_opt_value=*tcp_opt;
 		
-		if(tcp_opt_value==1)//No-Operation (NOP)
+		if(tcp_opt_value==0x01)//No-Operation (NOP)
 		{
 			//Move to next byte
 			tcp_opt++;
 		}
-		else if(tcp_opt_value==3) //TCP option kind: window scale (3)
+		else if(tcp_opt_value==0x03) //TCP option kind: window scale (3)
 		{
 			//return window scale shift count
 			return *(tcp_opt+2);
@@ -79,19 +80,19 @@ u8 tcp_get_scale(struct sk_buff *skb)
 }
 
 //Modify incoming TCP packets and return RTT sample value
-u32 tcp_modify_incoming(struct  sk_buff *skb)
+u32 tcp_modify_incoming(struct  sk_buff *skb, u32 time)
 {
 	struct iphdr *ip_header=NULL;	//IP  header structure
 	struct tcphdr *tcp_header=NULL;	//TCP header structure
-	unsigned int tcp_header_len=0;	//TCP header length
+	unsigned short tcp_header_len=0;	//TCP header length
 	u8 *tcp_opt=NULL;	//TCP option pointer
 	u32 *tsecr=NULL;	//TCP Timestamp echo reply pointer
-	u32 tcplen=0;	//Length of TCP
+	unsigned short tcplen=0;	//TCP packet length
 	u8 tcp_opt_value=0;	//TCP option pointer value
 	u32 rtt=0;	//Sample RTT
 	
 	//If we can not modify this packet, return 0
-	if (skb_linearize(skb)!= 0) 
+	if(skb_linearize(skb)!=0) 
 	{
 		return 0;
 	}
@@ -99,9 +100,9 @@ u32 tcp_modify_incoming(struct  sk_buff *skb)
 	//Get IP header
 	ip_header=(struct iphdr *)skb_network_header(skb);
 	//Get TCP header on the base of IP header
-	tcp_header = (struct tcphdr *)((__u32 *)ip_header+ ip_header->ihl);
+	tcp_header=(struct tcphdr *)((__u32 *)ip_header+ ip_header->ihl);
 	//Get TCP header length
-	tcp_header_len=(unsigned int)(tcp_header->doff*4);
+	tcp_header_len=(unsigned short)(tcp_header->doff*4);
 	
 	//Minimum TCP header length=20(Raw TCP header)+10(TCP Timestamp option)
 	if(tcp_header_len<30)
@@ -110,8 +111,9 @@ u32 tcp_modify_incoming(struct  sk_buff *skb)
 	}
 	
 	//TCP option offset=IP header pointer+IP header length+TCP header length
-	tcp_opt=(u8*)ip_header+ ip_header->ihl*4+20;
-	
+	tcp_opt=(u8*)ip_header+ip_header->ihl*4+20;
+	//printk(KERN_INFO "TCP header length is %hu\n",tcp_header_len);
+
 	while(1)
 	{
 		//If pointer has moved out off the range of TCP option, stop current loop
@@ -122,21 +124,21 @@ u32 tcp_modify_incoming(struct  sk_buff *skb)
 		//Get value of current byte
 		tcp_opt_value=*tcp_opt;
 		
-		if(tcp_opt_value==1)//No-Operation (NOP)
+		if(tcp_opt_value==0x01)//No-Operation (NOP)
 		{
 			//Move to next byte
 			tcp_opt++;
 		}
-		else if(tcp_opt_value==8) //TCP option kind: Timestamp (8)
+		else if(tcp_opt_value==0x08) //TCP option kind: Timestamp (8)
 		{
 			//Get pointer to Timestamp echo reply (TSecr)
 			tsecr=(u32*)(tcp_opt+6);
 			//Get one RTT sample
 			rtt=get_tsval()-ntohl(*tsecr);
-			//printk(KERN_INFO "RTT: %u\n",rtt);
+			//printk(KERN_INFO "Echo back value: %u\n",ntohl(*tsecr));
 			//Modify TCP TSecr back to jiffies
 			//Don't disturb TCP. Wrong TCP timestamp echo reply may reset TCP connections
-			*tsecr=htonl(jiffies);
+			*tsecr=htonl(time);
 			break;
 		}
 		else //Other TCP options (e.g. MSS(2))
@@ -146,12 +148,13 @@ u32 tcp_modify_incoming(struct  sk_buff *skb)
 			//Get length of this TCP option
 			tcp_opt_value=*tcp_opt;
 			//Move to next TCP option
-			tcp_opt=tcp_opt+1+(tcp_opt_value-2);
+			tcp_opt=tcp_opt+1+((unsigned int)tcp_opt_value-2);
 		}
 	}
 	
 	//TCP length=Total length - IP header length
-	tcplen=(ip_header->tot_len)-(ip_header->ihl<<2);
+	//tcplen=(ip_header->tot_len)-(ip_header->ihl<<2);
+	tcplen=skb->len-(ip_header->ihl<<2);
 	tcp_header->check=0;
 	tcp_header->check = csum_tcpudp_magic(ip_header->saddr, ip_header->daddr,tcplen, ip_header->protocol,csum_partial((char *)tcp_header, tcplen, 0));
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -189,8 +192,8 @@ u8 tcp_modify_outgoing(struct sk_buff *skb, u16 win, u32 time)
 	}
 	
 	//Modify TCP window. Note that TCP received window should be in (0,65535].
-    if(win<=65535&&win>0)
-        tcp_header->window=htons(win);
+	if(win>0)
+		tcp_header->window=htons(min(win,65535));
 
 	//TCP option offset=IP header pointer+IP header length+TCP header length
 	tcp_opt=(u8*)ip_header+ ip_header->ihl*4+20;
@@ -218,7 +221,8 @@ u8 tcp_modify_outgoing(struct sk_buff *skb, u16 win, u32 time)
 				//Get pointer to Timestamp value 
 				tsval=(u32*)(tcp_opt+2);
 				//Modify TCP Timestamp value
-				*tsval=htonl(time);
+				if(time>0)
+					*tsval=htonl(time);
 			}
 			break;
 		}
@@ -229,12 +233,13 @@ u8 tcp_modify_outgoing(struct sk_buff *skb, u16 win, u32 time)
 			//Get length of this TCP option
 			tcp_opt_value=*tcp_opt;
 			//Move to next TCP option
-			tcp_opt=tcp_opt+1+(tcp_opt_value-2);
+			tcp_opt=tcp_opt+1+((unsigned int)tcp_opt_value-2);
 		}
 	}
 	
 	//TCP length=Total length - IP header length
-	tcplen=(ip_header->tot_len)-(ip_header->ihl<<2);
+	//tcplen=(ip_header->tot_len)-(ip_header->ihl<<2);
+	tcplen=skb->len-(ip_header->ihl<<2);
 	tcp_header->check=0;
 	tcp_header->check=csum_tcpudp_magic(ip_header->saddr, ip_header->daddr,tcplen, ip_header->protocol,csum_partial((char *)tcp_header, tcplen, 0));					 
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
