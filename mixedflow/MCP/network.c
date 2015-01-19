@@ -4,6 +4,19 @@
 #include <net/dsfield.h>
 #include "network.h"
 
+//Calculate the expected window (bytes) to meet deadline 
+inline u32 expect_window_bytes(u32 bytes_remaining, u32 rtt, u32 delta_in_us)
+{
+	if(likely(delta_in_us>0))
+	{
+		return bytes_remaining*rtt/delta_in_us;
+	}
+	else
+	{
+		return 0;
+	}
+}
+
 //Calculate microsecond-granularity TCP timestamp value 
 inline u32 get_tsval(void)
 {

@@ -40,9 +40,9 @@ static unsigned int MCP_hook_func_out(unsigned int hooknum, struct sk_buff *skb,
 	struct MCP_Flow f;
 	unsigned long flags;
 	struct MCP_Flow_Info* infoPtr=NULL;
-	u32 window=0;
 	u32 deadline=0;
 	u32 delta_in_us=0;
+	u32 window_bytes=0;
 	ktime_t now=ktime_get();
 	
 	if(!out)
@@ -66,7 +66,7 @@ static unsigned int MCP_hook_func_out(unsigned int hooknum, struct sk_buff *skb,
 		f.local_port=ntohs(tcph->source);
 		f.remote_port=ntohs(tcph->dest);
 		MCP_Init_Info(&(f.info));
-		
+		//It's a new MCP flow
 		if(tcph->syn)
 		{
 			//Get data size (KB to B)
@@ -74,11 +74,16 @@ static unsigned int MCP_hook_func_out(unsigned int hooknum, struct sk_buff *skb,
 			f.info.last_update=now;
 			//Get deadline time (ms to ns)
 			deadline=(skb->mark)&0xfff00000;
+			//Potential deviations
+			if(deadline>6*(MCP_INIT_RTT<<10))
+				deadline-=6*(MCP_INIT_RTT<<10);
 			f.info.deadline.tv64=now.tv64+deadline;
 			f.info.scale=(1<<tcp_get_scale(skb));
-			f.info.window=MCP_INIT_WIN;
-			f.info.srtt= MCP_INIT_RTT;
-			//For test
+			f.info.srtt=MCP_INIT_RTT;
+			f.info.current_window=MCP_INIT_WIN;
+			//Calculate expect window
+			window_bytes=expect_window_bytes(f.info.bytes_total,f.info.srtt,deadline>>10)/MCP_TCP_PAYLOAD_LEN*MCP_TCP_MSS;
+			f.info.target_window=max(window_bytes/MCP_TCP_MSS+1,MCP_MIN_WIN);
 			//printk(KERN_INFO "Flow size is %u bytes. Deadline is %u ms. Window scale is %hu.\n",f.info.bytes_total,deadline>>20,f.info.scale);
 			//Insert MCP flow entry
 			spin_lock_irqsave(&(ft.tableLock),flags);
@@ -87,7 +92,7 @@ static unsigned int MCP_hook_func_out(unsigned int hooknum, struct sk_buff *skb,
 				printk(KERN_INFO "Insert fails\n");
 			}
 			spin_unlock_irqrestore(&(ft.tableLock),flags);
-			tcp_modify_outgoing(skb,f.info.window*MCP_TCP_MSS, get_tsval());
+			tcp_modify_outgoing(skb,f.info.current_window*MCP_TCP_MSS, get_tsval());
 		}
 		else
 		{
@@ -95,30 +100,41 @@ static unsigned int MCP_hook_func_out(unsigned int hooknum, struct sk_buff *skb,
 			if(infoPtr!=NULL)
 			{
 				spin_lock_irqsave(&(ft.tableLock),flags);
-				infoPtr->last_update=now;
 				delta_in_us=ktime_us_delta(infoPtr->deadline,now);
+				//Try to meet deadline
 				if(delta_in_us>0)
 				{
-					//Calculate window needed to meet flow ddl
-					window=(infoPtr->bytes_total-infoPtr->bytes_received)*infoPtr->srtt/delta_in_us*MCP_ETHERNET_PKT_LEN/ MCP_TCP_PAYLOAD_LEN;
-					if(window>infoPtr->window*MCP_TCP_MSS)
+					//If the interval is larger than RTT, we should update window
+					if(ktime_us_delta(now,infoPtr->last_update)>=infoPtr->srtt)
 					{
-						infoPtr->window+=1;
+						//Calculate window needed to meet flow ddl
+						window_bytes=expect_window_bytes(infoPtr->bytes_total-infoPtr->bytes_received,infoPtr->srtt,delta_in_us)/ MCP_TCP_PAYLOAD_LEN*MCP_TCP_MSS;
+						//Set new target_window
+						infoPtr->target_window=max(window_bytes/MCP_TCP_MSS+1,MCP_MIN_WIN);
+						infoPtr->last_update=now;
 					}
-					else if(window<=(infoPtr->window-1)*MCP_TCP_MSS)
+					
+					//Increase window by 1MSS each ACK at most
+					if(infoPtr->current_window<infoPtr->target_window)
 					{
-						infoPtr->window=max(infoPtr->window-1,MCP_INIT_WIN);
+						infoPtr->current_window+=1;
+					}
+					//Reduce window by 1MSS each ACK at most
+					else if(infoPtr->current_window>infoPtr->target_window)
+					{
+						infoPtr->current_window=max(infoPtr->current_window-1,MCP_MIN_WIN);
 					}
 				}
 				//Deadline has been missed (now>ddl)
 				else
 				{
 					//We should set minimal window to this flow
-					infoPtr->window=max(infoPtr->window-1,MCP_INIT_WIN);
+					infoPtr->target_window=MCP_MIN_WIN;
+					infoPtr->current_window=max(infoPtr->current_window-1,MCP_MIN_WIN);
 				}
 				spin_unlock_irqrestore(&(ft.tableLock),flags);
 				//printk(KERN_INFO "Window is %u MSS\n",infoPtr->window);
-				tcp_modify_outgoing(skb,infoPtr->window*MCP_TCP_MSS/infoPtr->scale+1, get_tsval());
+				tcp_modify_outgoing(skb,infoPtr->current_window*MCP_TCP_MSS/infoPtr->scale+1, get_tsval());
 			}
 		}
 	}
@@ -188,7 +204,7 @@ static unsigned int MCP_hook_func_in(unsigned int hooknum, struct sk_buff *skb, 
 				
 				spin_lock_irqsave(&(ft.tableLock),flags);
 				//Update smooth RTT
-				infoPtr->srtt=(MCP_RTT_SMOOTH*infoPtr->srtt+(1000-MCP_RTT_SMOOTH)*rtt)/1000;
+				infoPtr->srtt=min(MCP_MAX_RTT,(MCP_RTT_SMOOTH*infoPtr->srtt+(1000-MCP_RTT_SMOOTH)*rtt)/1000);
 				//Update received data and sequence number 
 				if(is_seq_larger(seq,infoPtr->latest_seq)>0)
 				{

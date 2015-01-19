@@ -8,12 +8,13 @@
  *	latest_seq: the latest sequence number of this flow
  *	bytes_received: the number of bytes that have been received (should exclude retranmission)
  * bytes_total: the total number of bytes of this flow
- *	window: the window size (MSS) of this flow
+ * target_window: the target window size (MSS) of this flow. This variable is updated each RTT.
+ *	current_window: current window size (MSS) of this flow
  * scale: TCP window scale
  *	srtt: the smoothed RTT value (us)
  *	bytes_received_rtt: the number of bytes that have been received in this RTT
  * bytes_received_ecn_rtt: he number of bytes that have been received and marked with ECN in this RTT 
- *	deadline: deadline time
+ * deadline: deadline time
  *	last_update: last update time of this flow
  */
 struct MCP_Flow_Info
@@ -21,7 +22,8 @@ struct MCP_Flow_Info
 	u32 latest_seq;
 	u32 bytes_received;
 	u32 bytes_total;
-	u16	window;
+	u16 current_window;
+	u16 target_window;
 	u16 scale;
 	u32 srtt;
 	u32 bytes_rtt_received;

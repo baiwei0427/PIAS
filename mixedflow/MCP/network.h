@@ -4,6 +4,7 @@
 #include <linux/skbuff.h>
 #include <linux/types.h>
 
+inline u32 expect_window_bytes(u32 bytes_remaining, u32 rtt, u32 delta_in_us);
 inline u32 get_tsval(void);
 inline void clear_ecn(struct sk_buff *skb);
 u8 tcp_get_scale(struct sk_buff *skb);

@@ -80,10 +80,12 @@ unsigned int MCP_Equal(struct MCP_Flow* f1,struct MCP_Flow* f2)
 //Initialize the info of a Flow
 void MCP_Init_Info(struct MCP_Flow_Info* info)
 {
+	//We need to initialize 11 variables in total
 	info->latest_seq=0;
 	info->bytes_received=0;
 	info->bytes_total=0;
-	info->window=0;
+	info->current_window=0;
+	info->target_window=0;
 	info->scale=0;
 	info->srtt=0;
 	info->bytes_rtt_received=0;
@@ -297,7 +299,7 @@ u16 MCP_Delete_List(struct MCP_Flow_List* fl, struct MCP_Flow* f)
 			else if(MCP_Equal(&(tmp->next->f),f)==1) 
 			{
 				//Get rwnd 
-				result=tmp->next->f.info.window;
+				result=tmp->next->f.info.current_window;
 				 s=tmp->next;
 				//Print_Flow(&(tmp->next->f),2);
 				tmp->next=s->next;
