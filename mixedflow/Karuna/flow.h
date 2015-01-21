@@ -27,8 +27,8 @@ struct Karuna_Flow_Info
 	u32 bytes_sent;
 	u32 bytes_total;
 	u16 timeouts;
-	bool is_size_known;
-	bool is_deadline_known;
+	bool is_size_known;	//If is_size_known is 1, it is type 2
+	bool is_deadline_known;	//If is_deadline_known is 1, it's type 1 
 };
 
 //Define structure of a TCP flow
@@ -89,8 +89,8 @@ struct Karuna_Flow_Info* Karuna_Search_List(struct Karuna_Flow_List* fl, struct 
 struct Karuna_Flow_Info* Karuna_Search_Table(struct Karuna_Flow_Table* ft, struct Karuna_Flow* f);
 
 //Delete functions
-u32 Karuna_Delete_List(struct Karuna_Flow_List* fl, struct Karuna_Flow* f);
-u32 Karuna_Delete_Table(struct Karuna_Flow_Table* ft,struct Karuna_Flow* f);
+u32 Karuna_Delete_List(struct Karuna_Flow_List* fl, struct Karuna_Flow* f, u8* type);
+u32 Karuna_Delete_Table(struct Karuna_Flow_Table* ft,struct Karuna_Flow* f, u8* type);
 
 //Empty functions
 void Karuna_Empty_List(struct Karuna_Flow_List* fl);

@@ -272,10 +272,11 @@ struct Karuna_Flow_Info* Karuna_Search_Table(struct Karuna_Flow_Table* ft, struc
 }
 
 //Delete a Flow from FlowList and return the bytes_sent/bytes_total/is_deadline_known of this flow if it succeeds
-//If it is a deadline flow, return 1
-//If it is a non-deadline flow but we know the size, return bytes_total (>=2)
-//If it is a non-deadline flow and we don't know the size, return bytes_sent (>=2)
-u32 Karuna_Delete_List(struct Karuna_Flow_List* fl, struct Karuna_Flow* f)
+//If it is a deadline flow (type 0), return 1
+//If it is a non-deadline flow but we know the size (type 1), return bytes_total (>=2)
+//If it is a non-deadline flow and we don't know the size (type 2), return bytes_sent (>=2)
+//This function should also set flow type 
+u32 Karuna_Delete_List(struct Karuna_Flow_List* fl, struct Karuna_Flow* f, u8* type)
 {
 	u32 result=0;
 	//No node in current FlowList
@@ -300,20 +301,23 @@ u32 Karuna_Delete_List(struct Karuna_Flow_List* fl, struct Karuna_Flow* f)
 			//Find the matching flow (matching FlowNode is tmp->next rather than tmp), delete flow and return
 			else if(Karuna_Equal(&(tmp->next->f),f)==1) 
 			{
-				//If it's a deadline flow, return 1
+				//If it's a deadline flow (type 0), return 1
 				if(tmp->next->f.info.is_deadline_known)
 				{
 					result=1;
+					*type=0;
 				}
-				//A non-deadline flow with priori knowledge of flow size, return bytes_total (>=2)
+				//A non-deadline flow with priori knowledge of flow size (type 1), return bytes_total (>=2)
 				else if(tmp->next->f.info.is_size_known)
 				{
 					result=max(2,tmp->next->f.info.bytes_total);
+					*type=1;
 				}
-				//A non-deadline flow without priori knowledge of flow size, return bytes_sent (>=2)
+				//A non-deadline flow without priori knowledge of flow size (type 2), return bytes_sent (>=2)
 				else
 				{
 					result=max(2,tmp->next->f.info.bytes_sent);
+					*type=2;
 				}
 				 s=tmp->next;
 				//Print_Flow(&(tmp->next->f),2);
@@ -337,14 +341,14 @@ u32 Karuna_Delete_List(struct Karuna_Flow_List* fl, struct Karuna_Flow* f)
 }
 
 //Delete a Flow from FlowTable and return corresponding result (see Karuna_Delete_List function) of this flow if it succeeds
-u32 Karuna_Delete_Table(struct Karuna_Flow_Table* ft,struct Karuna_Flow* f)
+u32 Karuna_Delete_Table(struct Karuna_Flow_Table* ft,struct Karuna_Flow* f, u8* type)
 {
 	u32 result=0;
 	unsigned int index=0;
 	index=Karuna_Hash(f);
 	//printk(KERN_INFO "Delete from link list %d\n",index);
 	//Delete Flow from appropriate FlowList based on Hash value
-	result=Karuna_Delete_List(&(ft->table[index]),f);
+	result=Karuna_Delete_List(&(ft->table[index]),f, type);
 	//Reduce the size of FlowTable by one
 	if(result>0)
 		ft->size-=1;
