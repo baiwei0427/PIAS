@@ -1,47 +1,63 @@
 #include <linux/ip.h>
 #include <net/dsfield.h>
+#include <net/inet_ecn.h>
 
 #include "network.h"
 #include "params.h"
+
+//Return the larges threshold which is smaller than size
+inline u32 Karuna_smaller_threshold(u32 size)
+{
+	if(size<=Karuna_AWARE_THRESHOLD_2)
+		return Karuna_AWARE_THRESHOLD_1;
+	else if(size<=Karuna_AWARE_THRESHOLD_3)
+		return Karuna_AWARE_THRESHOLD_2;
+	else if(size<=Karuna_AWARE_THRESHOLD_4)
+		return Karuna_AWARE_THRESHOLD_3;
+	else if(size<=Karuna_AWARE_THRESHOLD_5)
+		return Karuna_AWARE_THRESHOLD_4;
+	else if(size<=Karuna_AWARE_THRESHOLD_6)
+		return Karuna_AWARE_THRESHOLD_5;
+	else
+		return Karuna_AWARE_THRESHOLD_6;
+}
 
 //type: deadline flow(0), non-deadline flow with priori knowledge of size(1), non-deadline flow without priori knowledge of size(2)
 //size: 0 for deadline flow, bytes_total/bytes_sent for non-deadline flow 
 u8 Karuna_priority(u8 type, u32 size)
 {
+	//Type 2 flows
 	if(type==1)
 	{
 		if(size<=Karuna_AWARE_THRESHOLD_1)
-			return PRIORITY_DSCP_1;
-		else if(size<=Karuna_AWARE_THRESHOLD_2)
 			return PRIORITY_DSCP_2;
-		else if(size<=Karuna_AWARE_THRESHOLD_3)
+		else if(size<=Karuna_AWARE_THRESHOLD_2)
 			return PRIORITY_DSCP_3;
-		else if(size<=Karuna_AWARE_THRESHOLD_4)
+		else if(size<=Karuna_AWARE_THRESHOLD_3)
 			return PRIORITY_DSCP_4;
-		else if(size<=Karuna_AWARE_THRESHOLD_5)
+		else if(size<=Karuna_AWARE_THRESHOLD_4)
 			return PRIORITY_DSCP_5;
-		else if(size<=Karuna_AWARE_THRESHOLD_6)
+		else if(size<=Karuna_AWARE_THRESHOLD_5)
 			return PRIORITY_DSCP_6;
-		else if(size<=Karuna_AWARE_THRESHOLD_7)
+		else if(size<=Karuna_AWARE_THRESHOLD_6)
 			return PRIORITY_DSCP_7;
 		else
 			return PRIORITY_DSCP_8;
 	}
+	//Type 3 flows
 	else if(type==2)
 	{
 		if(size<=Karuna_AGNOSTIC_THRESHOLD_1)
-			return PRIORITY_DSCP_1;
-		else if(size<=Karuna_AGNOSTIC_THRESHOLD_2)
 			return PRIORITY_DSCP_2;
-		else if(size<=Karuna_AGNOSTIC_THRESHOLD_3)
+		else if(size<=Karuna_AGNOSTIC_THRESHOLD_2)
 			return PRIORITY_DSCP_3;
-		else if(size<=Karuna_AGNOSTIC_THRESHOLD_4)
+		else if(size<=Karuna_AGNOSTIC_THRESHOLD_3)
 			return PRIORITY_DSCP_4;
-		else if(size<=Karuna_AGNOSTIC_THRESHOLD_5)
+		else if(size<=Karuna_AGNOSTIC_THRESHOLD_4)
 			return PRIORITY_DSCP_5;
-		else if(size<=Karuna_AGNOSTIC_THRESHOLD_6)
+		else if(size<=Karuna_AGNOSTIC_THRESHOLD_5)
 			return PRIORITY_DSCP_6;
-		else if(size<=Karuna_AGNOSTIC_THRESHOLD_7)
+		else if(size<=Karuna_AGNOSTIC_THRESHOLD_6)
 			return PRIORITY_DSCP_7;
 		else
 			return PRIORITY_DSCP_8;
@@ -55,7 +71,7 @@ u8 Karuna_priority(u8 type, u32 size)
 //mark DSCP and enable ECN
 inline void Karuna_enable_ecn_dscp(struct sk_buff *skb, u8 dscp)
 {
-	if(skb_make_writable(skb,sizeof(struct iphdr))
+	if(skb_make_writable(skb,sizeof(struct iphdr)))
 	{
 		ipv4_change_dsfield(ip_hdr(skb), 0xff, (dscp<<2)|INET_ECN_ECT_0);
 	}

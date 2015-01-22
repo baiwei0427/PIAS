@@ -11,6 +11,7 @@ inline void Karuna_enable_ecn_dscp(struct sk_buff *skb, u8 dscp);
 //If seq1 is larger than seq2
 inline bool Karuna_is_seq_larger(u32 seq1, u32 seq2);
 inline u32 Karuna_seq_gap(u32 larger, u32 smaller);
+inline u32 Karuna_smaller_threshold(u32 size);
 
 #endif
 
