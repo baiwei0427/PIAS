@@ -3,36 +3,50 @@
 
 #include <linux/types.h>
 
-//Hash range
-extern const unsigned int PIAS_HASH_RANGE;
-//Maximum size of a list
-extern const unsigned int PIAS_LIST_SIZE;
+//Hash range (Number of lists)
+#define PIAS_HASH_RANGE (256)
+//Maximum lengh of a list
+#define PIAS_LIST_SIZE (32)
+//Maximum flow size (maximum value of signed 32-bit integer due to sysctl)
+#define PIAS_MAX_FLOW_SIZE (2147483647)
 
-extern const u32 PIAS_MAX_FLOW_SIZE;
 //RTOmin in us
-extern const unsigned int PIAS_RTO_MIN;
-extern const unsigned int PIAS_TIMEOUT_THRESH;
-
+extern const int PIAS_RTO_MIN;
+//Threshold of consecutive timeouts to reset priority
+extern const int PIAS_TIMEOUT_THRESH;
 //Sequence gap in bytes
-extern const unsigned int PIAS_SEQ_GAP_THRESH;
+extern const int PIAS_SEQ_GAP_THRESH;
 
-//7 demotion thresholds
-extern const u32 PIAS_THRESHOLD_1;
-extern const u32 PIAS_THRESHOLD_2;
-extern const u32 PIAS_THRESHOLD_3;
-extern const u32 PIAS_THRESHOLD_4;
-extern const u32 PIAS_THRESHOLD_5;
-extern const u32 PIAS_THRESHOLD_6;
-extern const u32 PIAS_THRESHOLD_7;
+//DSCP value for different priority queues (PIAS_PRIO_DSCP_1 is for the highest priority)
+extern const int PIAS_PRIO_DSCP_1;
+extern const int PIAS_PRIO_DSCP_2;
+extern const int PIAS_PRIO_DSCP_3;
+extern const int PIAS_PRIO_DSCP_4;
+extern const int PIAS_PRIO_DSCP_5;
+extern const int PIAS_PRIO_DSCP_6;
+extern const int PIAS_PRIO_DSCP_7;
+extern const int PIAS_PRIO_DSCP_8;
 
-//DSCP value for different priority queues (PRIORITY_DSCP_1 is for the highest priority)
-extern const u8 PIAS_PRIORITY_DSCP_1;
-extern const u8 PIAS_PRIORITY_DSCP_2;
-extern const u8 PIAS_PRIORITY_DSCP_3;
-extern const u8 PIAS_PRIORITY_DSCP_4;
-extern const u8 PIAS_PRIORITY_DSCP_5;
-extern const u8 PIAS_PRIORITY_DSCP_6;
-extern const u8 PIAS_PRIORITY_DSCP_7;
-extern const u8 PIAS_PRIORITY_DSCP_8;
+//7 demotion thresholds in bytes. PIAS_PRIO_THRESH_1 is the smallest one
+extern const int PIAS_PRIO_THRESH_1;
+extern const int PIAS_PRIO_THRESH_2;
+extern const int PIAS_PRIO_THRESH_3;
+extern const int PIAS_PRIO_THRESH_4;
+extern const int PIAS_PRIO_THRESH_5;
+extern const int PIAS_PRIO_THRESH_6;
+extern const int PIAS_PRIO_THRESH_7;
+
+struct PIAS_param {
+	char name[64];
+	int *ptr;
+};
+
+extern struct PIAS_param PIAS_params[32];
+
+
+//Intialize parameters and register sysctl
+int PIAS_params_init(void);
+//Unregister sysctl
+void PIAS_params_exit(void);
 
 #endif

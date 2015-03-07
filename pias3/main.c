@@ -216,7 +216,7 @@ static unsigned int pias_hook_func_in(unsigned int hooknum, struct sk_buff *skb,
 	return NF_ACCEPT;
 }
 
-int init_module()
+static int pias_module_init(void)
 {
 	int i=0;
     //Get interface
@@ -234,6 +234,9 @@ int init_module()
 			break;
 		}
 	}
+	
+	if(PIAS_params_init()<0)
+		return -1;
 		
 	//Initialize FlowTable
 	PIAS_Init_Table(&ft);
@@ -255,12 +258,12 @@ int init_module()
 #endif 
 	printk(KERN_INFO "Start pias kernel module on %s\n", param_dev);
 #ifdef ANTI_STARVATION
-	printk(KERN_INFO "Anti-starvation mechanism is enabled\n\n");
+	printk(KERN_INFO "Anti-starvation mechanism is enabled\n");
 #endif
 	return 0;
 }
 
-void cleanup_module()
+static void pias_module_exit(void)
 {
 	//Unregister two hooks
 	nf_unregister_hook(&pias_nf_hook_out);  
@@ -269,8 +272,10 @@ void cleanup_module()
 #endif
 	//Clear table
 	PIAS_Empty_Table(&ft);
-
+	PIAS_params_exit();
 	printk(KERN_INFO "Stop pias kernel module\n");
 }
 
+module_init(pias_module_init);
+module_exit(pias_module_exit);
 

@@ -9,22 +9,22 @@
 //We have 8 priorities at most.
 u8 PIAS_priority(u32 size)
 {
-	if(size<=PIAS_THRESHOLD_1)
-		return PIAS_PRIORITY_DSCP_1;
-	else if(size<=PIAS_THRESHOLD_2)
-		return PIAS_PRIORITY_DSCP_2;
-	else if(size<=PIAS_THRESHOLD_3)
-		return PIAS_PRIORITY_DSCP_3;
-	else if(size<=PIAS_THRESHOLD_4)
-		return PIAS_PRIORITY_DSCP_4;
-	else if(size<=PIAS_THRESHOLD_5)
-		return PIAS_PRIORITY_DSCP_5;
-	else if(size<=PIAS_THRESHOLD_6)
-		return PIAS_PRIORITY_DSCP_6;
-	else if(size<=PIAS_THRESHOLD_7)
-		return PIAS_PRIORITY_DSCP_7;
+	if(size<=PIAS_PRIO_THRESH_1)
+		return (u8)PIAS_PRIO_DSCP_1;
+	else if(size<=PIAS_PRIO_THRESH_2)
+		return (u8)PIAS_PRIO_DSCP_2;
+	else if(size<=PIAS_PRIO_THRESH_3)
+		return (u8)PIAS_PRIO_DSCP_3;
+	else if(size<=PIAS_PRIO_THRESH_4)
+		return (u8)PIAS_PRIO_DSCP_4;
+	else if(size<=PIAS_PRIO_THRESH_5)
+		return (u8)PIAS_PRIO_DSCP_5;
+	else if(size<=PIAS_PRIO_THRESH_6)
+		return (u8)PIAS_PRIO_DSCP_6;
+	else if(size<=PIAS_PRIO_THRESH_7)
+		return (u8)PIAS_PRIO_DSCP_7;
 	else
-		return PIAS_PRIORITY_DSCP_8;
+		return (u8)PIAS_PRIO_DSCP_8;
 }
 
 //mark DSCP and enable ECN
