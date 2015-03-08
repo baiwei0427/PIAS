@@ -21,17 +21,57 @@ MODULE_AUTHOR("BAI Wei baiwei0427@gmail.com");
 MODULE_VERSION("1.2");
 MODULE_DESCRIPTION("Linux kernel module for PIAS (Practical Information-Agnostic flow Scheduling)");
 
-static char *param_dev=NULL;
-MODULE_PARM_DESC(param_dev, "Interface to operate PIAS");
-module_param(param_dev, charp, 0);
-
 //FlowTable
 static struct PIAS_Flow_Table ft;
-
 //The hook for outgoing packets 
 static struct nf_hook_ops pias_nf_hook_out;
 //The hook for incoming packets 
 static struct nf_hook_ops pias_nf_hook_in;
+
+//The following two functions are related to param_table_operation
+//To clear flow table: echo -n clear > /sys/module/pias/parameters/param_table_operation
+//To print flow table: echo -n print > /sys/module/pias/parameters/param_table_operation
+static int pias_set_operation(const char *val, struct kernel_param *kp);
+static int pias_noget(const char *val, struct kernel_param *kp);
+//static char *param_table_operation=NULL;
+//MODULE_PARM_DESC(param_table_operation, "Operation to flow table (Print or Clear)");
+module_param_call(param_table_operation, pias_set_operation, pias_noget, NULL, S_IWUSR); //Write permission by owner
+
+static char *param_dev=NULL;
+MODULE_PARM_DESC(param_dev, "Interface to operate PIAS");
+module_param(param_dev, charp, 0);
+
+static int pias_set_operation(const char *val, struct kernel_param *kp)
+{
+	unsigned long flags;	//variable for save current states of irq
+		
+	//For debug
+	printk(KERN_INFO "PIAS: param_table_operation is set\n");
+	//Clear flow table
+	if(strncmp(val,"clear\0",5)==0)
+	{
+		spin_lock_irqsave(&(ft.tableLock),flags);
+		PIAS_Clear_Table(&ft);
+		spin_unlock_irqrestore(&(ft.tableLock),flags);
+	}
+	//Print flow table
+	else if(strncmp(val,"print\0",5)==0)
+	{
+		//spin_lock_irqsave(&(ft.tableLock),flags);
+		PIAS_Print_Table(&ft);
+		//spin_unlock_irqrestore(&(ft.tableLock),flags);
+	}
+	else
+	{
+		printk(KERN_INFO "PIAS: unrecognized flow table operation\n");
+	}
+	return 0;
+}
+
+static int pias_noget(const char *val, struct kernel_param *kp)
+{
+	return 0;
+}
 
 //Hook function for outgoing packets
 static unsigned int pias_hook_func_out(unsigned int hooknum, struct sk_buff *skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *))
@@ -77,7 +117,7 @@ static unsigned int pias_hook_func_out(unsigned int hooknum, struct sk_buff *skb
 			spin_lock_irqsave(&(ft.tableLock),flags);
 			if(PIAS_Insert_Table(&ft,&f,GFP_ATOMIC)==0)
 			{
-				printk(KERN_INFO "Insert fail\n");
+				printk(KERN_INFO "PIAS: insert fail\n");
 			}
 			spin_unlock_irqrestore(&(ft.tableLock),flags);
 			dscp=PIAS_priority(0);
@@ -91,7 +131,7 @@ static unsigned int pias_hook_func_out(unsigned int hooknum, struct sk_buff *skb
 			//PIAS_Delete_Table returns bytes sent information of this flow
 			if(result==0)
 			{
-				printk(KERN_INFO "Delete fail\n");
+				printk(KERN_INFO "PIAS: delete fail\n");
 			}
 			spin_unlock_irqrestore(&(ft.tableLock),flags);
 			dscp=PIAS_priority(result);
@@ -256,9 +296,9 @@ static int pias_module_init(void)
 	pias_nf_hook_in.priority=NF_IP_PRI_FIRST;			              
 	nf_register_hook(&pias_nf_hook_in);		                   
 #endif 
-	printk(KERN_INFO "Start pias kernel module on %s\n", param_dev);
+	printk(KERN_INFO "PIAS: start on %s\n", param_dev);
 #ifdef ANTI_STARVATION
-	printk(KERN_INFO "Anti-starvation mechanism is enabled\n");
+	printk(KERN_INFO "PIAS: anti-starvation mechanism is enabled\n");
 #endif
 	return 0;
 }
@@ -270,10 +310,10 @@ static void pias_module_exit(void)
 #ifdef ANTI_STARVATION
 	nf_unregister_hook(&pias_nf_hook_in);
 #endif
-	//Clear table
-	PIAS_Empty_Table(&ft);
+	//Clear flow table
+	PIAS_Exit_Table(&ft);
 	PIAS_params_exit();
-	printk(KERN_INFO "Stop pias kernel module\n");
+	printk(KERN_INFO "PIAS: stop working\n");
 }
 
 module_init(pias_module_init);

@@ -72,20 +72,24 @@ void PIAS_Init_Node(struct PIAS_Flow_Node* fn);
 void PIAS_Init_List(struct PIAS_Flow_List* fl);
 void PIAS_Init_Table(struct PIAS_Flow_Table* ft);
 
-//Insert functions
+//Insert functions: insert a new flow entry to flow table/list
 unsigned int PIAS_Insert_List(struct PIAS_Flow_List* fl, struct PIAS_Flow* f, int flags);
 unsigned int PIAS_Insert_Table(struct PIAS_Flow_Table* ft,struct PIAS_Flow* f, int flags);
 
-//Search functions
+//Search functions: search a flow entry from flow table/list
 struct PIAS_Flow_Info* PIAS_Search_List(struct PIAS_Flow_List* fl, struct PIAS_Flow* f);
 struct PIAS_Flow_Info* PIAS_Search_Table(struct PIAS_Flow_Table* ft, struct PIAS_Flow* f);
 
-//Delete functions
+//Delete functions: delete a flow entry from flow table/list
 u32 PIAS_Delete_List(struct PIAS_Flow_List* fl, struct PIAS_Flow* f);
 u32 PIAS_Delete_Table(struct PIAS_Flow_Table* ft,struct PIAS_Flow* f);
 
-//Empty functions
-void PIAS_Empty_List(struct PIAS_Flow_List* fl);
-void PIAS_Empty_Table(struct PIAS_Flow_Table* ft);
+//Clear functions: clear flow entries from flow table/list
+void PIAS_Clear_List(struct PIAS_Flow_List* fl);
+void PIAS_Clear_Table(struct PIAS_Flow_Table* ft);
+
+//Exit functions: delete whole flow table
+void PIAS_Exit_List(struct PIAS_Flow_List* fl);
+void PIAS_Exit_Table(struct PIAS_Flow_Table* ft);
 
 #endif

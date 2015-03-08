@@ -16,15 +16,15 @@ void PIAS_Print_Flow(struct PIAS_Flow* f, int type)
 	
 	if(type==0)
 	{
-		printk(KERN_INFO "Insert a Flow record: %s:%hu to %s:%hu \n",local_ip,f->local_port,remote_ip,f->remote_port);
+		printk(KERN_INFO "PIAS: insert a flow record from %s:%hu to %s:%hu \n",local_ip,f->local_port,remote_ip,f->remote_port);
 	}
 	else if(type==1)
 	{
-		printk(KERN_INFO "Delete a Flow record: %s:%hu to %s:%hu \n",local_ip,f->local_port,remote_ip,f->remote_port);
+		printk(KERN_INFO "PIAS: delete a flow record from %s:%hu to %s:%hu \n",local_ip,f->local_port,remote_ip,f->remote_port);
 	}
 	else
 	{
-		printk(KERN_INFO "Flow record: %s:%hu to %s:%hu \n",local_ip,f->local_port,remote_ip,f->remote_port);
+		printk(KERN_INFO "PIAS: flow record from %s:%hu to %s:%hu, bytes_sent=%u\n",local_ip,f->local_port,remote_ip,f->remote_port,f->info.bytes_sent);
 	}
 }
 
@@ -48,16 +48,16 @@ void PIAS_Print_List(struct PIAS_Flow_List* fl)
 void PIAS_Print_Table(struct PIAS_Flow_Table* ft)
 {		
 	int i=0;
-	printk(KERN_INFO "Current flow table:\n");
+	printk(KERN_INFO "PIAS: current flow table\n");
 	for(i=0;i<PIAS_HASH_RANGE;i++)
     {
 		if(ft->table[i].len>0)
         {
-			printk(KERN_INFO "FlowList %d\n",i);
+			printk(KERN_INFO "PIAS: flowlist %d\n",i);
 			PIAS_Print_List(&(ft->table[i]));
         }
     }
-	printk(KERN_INFO "There are %u flows in total\n",ft->size);
+	printk(KERN_INFO "PIAS: there are %u flows in total\n",ft->size);
 }
 
 //Hash function, calculate the flow should be inserted into which PIAS_Flow_List
@@ -120,7 +120,7 @@ void PIAS_Init_List(struct PIAS_Flow_List* fl)
 	buf=vmalloc(sizeof(struct  PIAS_Flow_Node));
 	if(buf==NULL)
 	{
-		printk(KERN_INFO "Vmalloc error in PIAS_Init_List\n");
+		printk(KERN_INFO "PIAS_Init_List: vmalloc error\n");
 	}
 	else
 	{
@@ -139,7 +139,7 @@ void PIAS_Init_Table(struct PIAS_Flow_Table* ft)
 	buf=vmalloc(PIAS_HASH_RANGE*sizeof(struct PIAS_Flow_List));
 	if(buf==NULL)
 	{
-		printk(KERN_INFO "Vmalloc error in PIAS_Init_Table\n");
+		printk(KERN_INFO "PIAS_Init_Table: vmalloc error\n");
 	}
 	else
 	{
@@ -161,7 +161,7 @@ unsigned int PIAS_Insert_List(struct PIAS_Flow_List* fl, struct PIAS_Flow* f, in
 {
 	if(fl->len>=PIAS_LIST_SIZE) 
 	{
-		printk(KERN_INFO "PIAS_Insert_List: No enough space in this link list\n");
+		printk(KERN_INFO "PIAS_Insert_List: no enough space in this link list\n");
 		return 0;
 	} 
 	else 
@@ -171,15 +171,15 @@ unsigned int PIAS_Insert_List(struct PIAS_Flow_List* fl, struct PIAS_Flow* f, in
 
         //Come to the tail of this FlowList
         while(1)
-        {
+		{
 			//If pointer to next node is NULL, we find the tail of this FlowList. Here we can insert our new Flow
-            if(tmp->next==NULL)
-            {
+			if(tmp->next==NULL)
+			{
 				//Allocate memory. The 'flags' is determined by context
 				buf=kmalloc(sizeof(struct PIAS_Flow_Node),flags);
 				if(buf==NULL) //Fail to allocate memory
 				{
-					printk(KERN_INFO "PIAS_Insert_List: Kmalloc error\n");
+					printk(KERN_INFO "PIAS_Insert_List: kmalloc error\n");
 					return 0;
 				}
 				else
@@ -197,14 +197,14 @@ unsigned int PIAS_Insert_List(struct PIAS_Flow_List* fl, struct PIAS_Flow* f, in
             //If the rule of next node is the same as our inserted flow, we just finish the insert  
 			else if(PIAS_Equal(&(tmp->next->f),f)==1) 
 			{
-				printk(KERN_INFO "PIAS_Insert_List: Equal Flow\n");
+				printk(KERN_INFO "PIAS_Insert_List: equal flow\n");
 				return 0;
 			}
             else //Move to next FlowNode
-            {
+			{
 				tmp=tmp->next;
-            }
-       }
+			}
+		}
 		return 0;
 	}
 }
@@ -331,7 +331,31 @@ u32 PIAS_Delete_Table(struct PIAS_Flow_Table* ft, struct PIAS_Flow* f)
 	return result;
 }
 
-void PIAS_Empty_List(struct PIAS_Flow_List* fl)
+void PIAS_Clear_List(struct PIAS_Flow_List* fl)
+{
+	struct PIAS_Flow_Node* NextNode;
+	struct PIAS_Flow_Node* Ptr;
+	for(Ptr=fl->head;Ptr!=NULL;Ptr=NextNode)
+	{
+		NextNode=Ptr->next;
+		if(Ptr!=fl->head)
+			kfree(Ptr);
+	}
+	fl->len=0;
+}
+
+void PIAS_Clear_Table(struct PIAS_Flow_Table* ft)
+{
+	int i=0;
+	for(i=0;i<PIAS_HASH_RANGE;i++)
+	{
+		if(ft->table[i].len>0)
+			PIAS_Clear_List(&(ft->table[i]));
+	}
+	ft->size=0;
+}
+
+void PIAS_Exit_List(struct PIAS_Flow_List* fl)
 {
 	struct PIAS_Flow_Node* NextNode;
 	struct PIAS_Flow_Node* Ptr;
@@ -347,12 +371,12 @@ void PIAS_Empty_List(struct PIAS_Flow_List* fl)
 	}
 }
 
-void PIAS_Empty_Table(struct PIAS_Flow_Table* ft)
+void PIAS_Exit_Table(struct PIAS_Flow_Table* ft)
 {
 	int i=0;
 	for(i=0;i<PIAS_HASH_RANGE;i++)
 	{
-		PIAS_Empty_List(&(ft->table[i]));
+		PIAS_Exit_List(&(ft->table[i]));
 	}
 	vfree(ft->table);
 }
