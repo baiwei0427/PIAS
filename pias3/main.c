@@ -50,9 +50,11 @@ static int pias_set_operation(const char *val, struct kernel_param *kp)
 	//Clear flow table
 	if(strncmp(val,"clear\0",5)==0)
 	{
-		spin_lock_irqsave(&(ft.tableLock),flags);
+		//spin_lock_irqsave(&(ft.tableLock),flags);
+		spin_lock_bh(&(ft.tableLock));
 		PIAS_Clear_Table(&ft);
-		spin_unlock_irqrestore(&(ft.tableLock),flags);
+		spin_unlock_bh(&(ft.tableLock));
+		//spin_unlock_irqrestore(&(ft.tableLock),flags);
 	}
 	//Print flow table
 	else if(strncmp(val,"print\0",5)==0)
@@ -114,43 +116,48 @@ static unsigned int pias_hook_func_out(unsigned int hooknum, struct sk_buff *skb
 			f.info.latest_seq=ntohl(tcph->seq);	
 			f.info.latest_update_time=now;
 			//A new Flow entry should be inserted into FlowTable
-			spin_lock_irqsave(&(ft.tableLock),flags);
+			//spin_lock_irqsave(&(ft.tableLock),flags);
+			spin_lock_bh(&(ft.tableLock));
 			if(PIAS_Insert_Table(&ft,&f,GFP_ATOMIC)==0)
 			{
 				printk(KERN_INFO "PIAS: insert fail\n");
 			}
-			spin_unlock_irqrestore(&(ft.tableLock),flags);
+			spin_unlock_bh(&(ft.tableLock));
+			//spin_unlock_irqrestore(&(ft.tableLock),flags);
 			dscp=PIAS_priority(0);
 		}
 		//TCP FIN/RST packets, connection will be closed 
 		else if(tcph->fin||tcph->rst)  
 		{
 			//An existing Flow entry should be deleted from FlowTable. 
-			spin_lock_irqsave(&(ft.tableLock),flags);
+			//spin_lock_irqsave(&(ft.tableLock),flags);
+			spin_lock_bh(&(ft.tableLock));
 			result=PIAS_Delete_Table(&ft,&f);
+			spin_unlock_bh(&(ft.tableLock));
+			//spin_unlock_irqrestore(&(ft.tableLock),flags);
 			//PIAS_Delete_Table returns bytes sent information of this flow
 			if(result==0)
 			{
 				printk(KERN_INFO "PIAS: delete fail\n");
 			}
-			spin_unlock_irqrestore(&(ft.tableLock),flags);
 			dscp=PIAS_priority(result);
 		}
 		else
 		{
+			//TCP payload length=Total IP length - IP header length-TCP header length
+			payload_len=ntohs(iph->tot_len)-(iph->ihl<<2)-(tcph->doff<<2);      
+			seq=(u32)ntohl(tcph->seq);
+			//Get the sequence number of the last payload byte 
+			if(payload_len>=1)
+			{
+				seq=seq+payload_len-1;
+			}
 			//Update existing Flow entry's information
-			spin_lock_irqsave(&(ft.tableLock),flags);
+			//spin_lock_irqsave(&(ft.tableLock),flags);
+			spin_lock_bh(&(ft.tableLock));
 			infoPtr=PIAS_Search_Table(&ft,&f);
 			if(infoPtr!=NULL)
 			{
-				//TCP payload length=Total IP length - IP header length-TCP header length
-				payload_len=ntohs(iph->tot_len)-(iph->ihl<<2)-(tcph->doff<<2);      
-				seq=ntohl(tcph->seq);
-				//Get the sequence number of the last payload byte 
-				if(payload_len>=1)
-				{
-					seq=seq+payload_len-1;
-				}
 				//A new TCP packet 
 				if(PIAS_is_seq_larger(seq,infoPtr->latest_seq)==1)
 				{
@@ -202,7 +209,8 @@ static unsigned int pias_hook_func_out(unsigned int hooknum, struct sk_buff *skb
 			{
 				dscp=PIAS_priority(0);
 			}
-			spin_unlock_irqrestore(&(ft.tableLock),flags);
+			//spin_unlock_irqrestore(&(ft.tableLock),flags);
+			spin_unlock_bh(&(ft.tableLock));
 		}
 		//Modify DSCP and make the packet ECT
 		PIAS_enable_ecn_dscp(skb,dscp);
@@ -235,23 +243,28 @@ static unsigned int pias_hook_func_in(unsigned int hooknum, struct sk_buff *skb,
 	if(iph->protocol==IPPROTO_TCP) 
 	{
 		tcph=(struct tcphdr *)((__u32 *)iph+ iph->ihl);
-		PIAS_Init_Flow(&f);
-		f.local_ip=iph->daddr;
-		f.remote_ip=iph->saddr;
-		f.local_port=(u16)ntohs(tcph->dest);
-		f.remote_port=(u16)ntohs(tcph->source);
-		//Update existing Flow entry's information
-		spin_lock_irqsave(&(ft.tableLock),flags);
-		infoPtr=PIAS_Search_Table(&ft,&f);
-		if(infoPtr!=NULL)
+		if(tcph->ack)
 		{
-			ack=(u32)ntohl(tcph->ack);
-			if(PIAS_is_seq_larger(ack,infoPtr->latest_ack)==1)
+			PIAS_Init_Flow(&f);
+			f.local_ip=iph->daddr;
+			f.remote_ip=iph->saddr;
+			f.local_port=(u16)ntohs(tcph->dest);
+			f.remote_port=(u16)ntohs(tcph->source);
+			//Update existing Flow entry's information
+			spin_lock_bh(&(ft.tableLock));
+			//spin_lock_irqsave(&(ft.tableLock),flags);
+			infoPtr=PIAS_Search_Table(&ft,&f);
+			if(infoPtr!=NULL)
 			{
-				infoPtr->latest_ack=ack;
+				ack=(u32)ntohl(tcph->ack_seq);
+				if(PIAS_is_seq_larger(ack,infoPtr->latest_ack)==1)
+				{
+					infoPtr->latest_ack=ack;
+				}
 			}
+			spin_unlock_bh(&(ft.tableLock));
+			//spin_unlock_irqrestore(&(ft.tableLock),flags);
 		}
-		spin_unlock_irqrestore(&(ft.tableLock),flags);
 	}
 	return NF_ACCEPT;
 }

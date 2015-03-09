@@ -24,7 +24,7 @@ void PIAS_Print_Flow(struct PIAS_Flow* f, int type)
 	}
 	else
 	{
-		printk(KERN_INFO "PIAS: flow record from %s:%hu to %s:%hu, bytes_sent=%u\n",local_ip,f->local_port,remote_ip,f->remote_port,f->info.bytes_sent);
+		printk(KERN_INFO "PIAS: flow record from %s:%hu to %s:%hu, bytes_sent=%u, seq=%u, ACK=%u\n",local_ip,f->local_port,remote_ip,f->remote_port,f->info.bytes_sent,f->info.latest_seq,f->info.latest_ack);
 	}
 }
 
