@@ -20,6 +20,7 @@
 #include <linux/skbuff.h>
 #include <net/netlink.h>
 #include <net/pkt_sched.h>
+#include <net/inet_ecn.h>
 
 
 /*	Simple Token Bucket Filter.
@@ -97,6 +98,8 @@
 	changed the limit is not effective anymore.
 */
 
+#define ECN_THRESH 30000
+
 struct tbf_sched_data
 {
 /* Parameters */
@@ -104,6 +107,8 @@ struct tbf_sched_data
 	u32		buffer;		/* Token bucket depth/rate: MUST BE >= MTU/B */
 	u32		mtu;
 	u32		max_size;
+	u32		qlen_sum_bytes;	/* Sum of queue lengths in bytes */
+	
 	struct qdisc_rate_table	*R_tab;
 	struct qdisc_rate_table	*P_tab;
 
@@ -136,6 +141,14 @@ static int tbf_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 	sch->q.qlen++;
 	sch->bstats.bytes += qdisc_pkt_len(skb);
 	sch->bstats.packets++;
+	q->qlen_sum_bytes+=qdisc_pkt_len(skb);
+	
+	if(q->qlen_sum_bytes>=ECN_THRESH)
+	{
+		INET_ECN_set_ce(skb);	
+		printk(KERN_INFO "ECN marking\n");
+	}
+	
 	return 0;
 }
 
@@ -186,9 +199,10 @@ static struct sk_buff *tbf_dequeue(struct Qdisc* sch)
 			q->t_c = now;
 			q->tokens = toks;
 			q->ptokens = ptoks;
+			q->qlen_sum_bytes-=qdisc_pkt_len(skb);
 			sch->q.qlen--;
 			sch->flags &= ~TCQ_F_THROTTLED;
-			printk(KERN_INFO "tokens: %ld ptokens: %ld",q->tokens,q->ptokens);
+			printk(KERN_INFO "tokens: %ld ptokens: %ld qlen:%u",q->tokens,q->ptokens,q->qlen_sum_bytes);
 			return skb;
 		}
 
@@ -220,6 +234,7 @@ static void tbf_reset(struct Qdisc* sch)
 	q->t_c = psched_get_time();
 	q->tokens = q->buffer;
 	q->ptokens = q->mtu;
+	q->qlen_sum_bytes=0;
 	qdisc_watchdog_cancel(&q->watchdog);
 }
 
@@ -316,6 +331,7 @@ static int tbf_init(struct Qdisc* sch, struct nlattr *opt)
 		return -EINVAL;
 
 	q->t_c = psched_get_time();
+	q->qlen_sum_bytes=0;
 	qdisc_watchdog_init(&q->watchdog, sch);
 	q->qdisc = &noop_qdisc;
 
