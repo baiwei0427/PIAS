@@ -15,7 +15,7 @@
 
 #define PIAS_ECN_THRESH_BYTES 30720	//Per-port ECN marking threshold 
 
-#define PIAS_RATE_BPS 980000000
+#define PIAS_RATE_BPS 500000000 //980000000
 
 #define PIAS_MAX_PACKET_BYTES 65536
 #define PIAS_MIN_PACKET_BYTES 64
@@ -25,7 +25,7 @@ struct pias_sched_data
 {
 /* Parameters */
 	struct Qdisc **queues; /* Priority queues where queues[0] has the highest priority*/
-	u64 rate_bps;	/* Rate in bps */
+	u64 rate_bps;	/* Rate in bit per second (bps) */
 
 /* Variables */
 	u64 tokens;	/* Tokens in bytes */ 
@@ -33,14 +33,14 @@ struct pias_sched_data
 	u32 max_len; 	/* Maximum value of sum_len*/
 	//spinlock_t spinlock;
 	struct Qdisc *sch; 
-	s64	time_us;	/* Time check-point */ 
+	s64	time_ns;	/* Time check-point */ 
 	struct hrtimer timer;	/* Watchdog timer */
-}
+};
 
 /* We use this function to account for the true number of bytes sent on wire.*/
 static inline unsigned int skb_size(struct sk_buff *skb)
 {
-	return max(skb->len,PIAS_MIN_PACKET_BYTES);
+	return max_t(unsigned int, skb->len,PIAS_MIN_PACKET_BYTES);
 }
 
 static inline void pias_qdisc_ecn(struct sk_buff *skb)
@@ -49,6 +49,16 @@ static inline void pias_qdisc_ecn(struct sk_buff *skb)
 		IP_ECN_set_ce(ip_hdr(skb));
 }
 
+/* Time to Length, convert time in ns to length in bytes
+ * to determinate how many bytes can be sent in given time.
+ */
+static u64 pias_qdisc_t2l(u64 rate_in_bps, u64 time_in_ns)
+{
+	u64 result=rate_in_bps/8*time_in_ns/1000000000;
+	printk(KERN_INFO "sch_pias: time interval is %llu us, new tokens is %llu bytes\n", time_in_ns/1000,result);
+	return result;
+}
+			
 static struct Qdisc * pias_qdisc_classify(struct sk_buff *skb, struct Qdisc *sch)
 {
 	struct pias_sched_data *q = qdisc_priv(sch);	
@@ -77,7 +87,95 @@ enum hrtimer_restart pias_qdisc_timeout(struct hrtimer *timer)
 {
 	struct pias_sched_data *q = container_of(timer, struct pias_sched_data, timer);
 	qdisc_unthrottled(q->sch);
+	printk(KERN_INFO "sch_pias: rescheduled by hrtimer\n");
+	//__netif_schedule(qdisc_root(q->sch));
 	return HRTIMER_NORESTART;
+}
+
+static struct sk_buff* pias_qdisc_dequeue_peeked(struct Qdisc *sch)
+{
+	struct pias_sched_data *q = qdisc_priv(sch);
+	struct Qdisc *qdisc;
+	struct sk_buff *skb;
+	int i;
+
+	for(i=0;i<PIAS_MAX_PRIO && q->queues[i]; i++)
+	{
+		qdisc = q->queues[i];
+		skb = qdisc_dequeue_peeked(qdisc);
+		if (skb)
+			return skb;
+	}
+	return NULL;
+}
+
+static struct sk_buff*pias_qdisc_peek(struct Qdisc *sch)
+{
+	struct pias_sched_data *q = qdisc_priv(sch);
+	struct Qdisc *qdisc;
+	struct sk_buff *skb;
+	int i;
+
+	for(i=0;i<PIAS_MAX_PRIO && q->queues[i]; i++)
+	{
+		qdisc = q->queues[i];
+		skb = qdisc->ops->peek(qdisc);
+		if (skb)
+			return skb;
+	}
+	return NULL;
+}
+
+static struct sk_buff* pias_qdisc_dequeue(struct Qdisc *sch)
+{
+	struct pias_sched_data *q = qdisc_priv(sch);	
+	struct sk_buff *skb;
+	unsigned int len;
+	u64 now=ktime_to_ns(ktime_get());
+	s64 toks;
+	
+	skb = pias_qdisc_peek(sch);
+	if(skb)
+	{
+		//toks=(s64)pias_qdisc_t2l(q->rate_bps,now-q->time_ns);
+		toks=min_t(s64,(s64)pias_qdisc_t2l(q->rate_bps,now-q->time_ns),(s64)PIAS_MAX_PACKET_BYTES);
+		printk(KERN_INFO "sch_pias: toks1 = %lld\n", toks);
+		len=skb_size(skb);
+		toks+=q->tokens;
+		printk(KERN_INFO "sch_pias: toks2 = %lld\n", toks);
+		toks-=(s64)len;
+		//If we have enough tokens to release this packet
+		if(toks>=0)
+		{
+			skb = pias_qdisc_dequeue_peeked(sch);
+			
+			if (unlikely(!skb))
+				return NULL;
+			
+			printk(KERN_INFO "sch_pias: toks3 = %lld\n", toks);
+			q->time_ns = now;
+			q->tokens = toks;
+			q->sum_len-=len;
+			printk(KERN_INFO "sch_pias: dequeue a packet with len=%u\n",len);
+			//printk(KERN_INFO "sch_pias: sum_len2 = %u\n", q->sum_len);
+			//sch->q.qlen--;
+			
+			//Bucket 
+			if(q->tokens>PIAS_MAX_PACKET_BYTES&&q->sum_len==0)
+				q->tokens=PIAS_MAX_PACKET_BYTES;
+			
+			qdisc_unthrottled(sch);
+			qdisc_bstats_update(sch, skb);
+			return skb;
+		}
+		else
+		{
+			//The timer interval is 100us 
+			pias_qdisc_watchdog(q,100*1000);
+			qdisc_qstats_overlimit(sch);
+		}
+	}
+	return NULL;
 }
 
 static int pias_qdisc_enqueue(struct sk_buff *skb, struct Qdisc *sch)
@@ -90,31 +188,35 @@ static int pias_qdisc_enqueue(struct sk_buff *skb, struct Qdisc *sch)
 	qdisc=pias_qdisc_classify(skb,sch);
 	
 	//No appropriate priority queue or queue limit is reached
-	if(qdisc==NULL||sum_len+len>q->max_len)
+	if(qdisc==NULL||q->sum_len+len>q->max_len)
 	{
+		printk(KERN_INFO "sch_pias: packet drop\n");
 		qdisc_qstats_drop(sch);
-		//kfree_skb(skb);
+		kfree_skb(skb);
 		return NET_XMIT_DROP;
 	}
 	else
 	{
 		//ECN marking
-		if(sum_len+len>PIAS_ECN_THRESH_BYTES)
+		if(q->sum_len+len>PIAS_ECN_THRESH_BYTES)
+		{
+			printk(KERN_INFO "sch_pias: ECN marking\n");
 			pias_qdisc_ecn(skb);
+		}
 		
 		ret=qdisc_enqueue(skb, qdisc);
 		if(ret == NET_XMIT_SUCCESS) 
 		{
-			sch->q.qlen++;
-			sum_len+=len;
-			return NET_XMIT_SUCCESS;
+			//sch->q.qlen++;
+			q->sum_len+=len;
+			printk(KERN_INFO "sch_pias: sum_len1 = %u\n", q->sum_len);
 		}
 		else
 		{
 			if (net_xmit_drop_count(ret))
 				qdisc_qstats_drop(sch);
-			return ret;
 		}
+		return ret;
 	}
 }
 
@@ -128,6 +230,12 @@ static unsigned int pias_qdisc_drop(struct Qdisc *sch)
 static int pias_qdisc_change(struct Qdisc *sch, struct nlattr *opt)
 {
 	return 0;	
+}
+
+/* We don't need this */
+static int pias_qdisc_dump(struct Qdisc *sch, struct sk_buff *skb)
+{
+	return 0;
 }
 
 /* Release Qdisc resources */
@@ -158,11 +266,12 @@ static int pias_qdisc_init(struct Qdisc *sch, struct nlattr *opt)
 		return -EOPNOTSUPP;
 	
 	q->queues=kcalloc(PIAS_MAX_PRIO, sizeof(struct Qdisc),GFP_KERNEL);
-	if(q->queuess == NULL)
+	if(q->queues == NULL)
 		return -ENOMEM;
 	
 	//spin_lock_init(&q->spinlock);
-	q->time_us = ktime_to_ns(ktime_get());
+	q->tokens = 0;
+	q->time_ns = ktime_to_ns(ktime_get());
 	q->rate_bps = PIAS_RATE_BPS;
 	q->sum_len=0;
 	q->max_len = PIAS_MAX_LEN_BYTES;	
