@@ -29,8 +29,7 @@ http://sing.cse.ust.hk/papers/pias-tr.pdf
 
 PIAS in USENIX NSDI 2015
 
-It will be available soon
-
+http://sing.cse.ust.hk/papers/pias-nsdi2015.pdf
 
 
 
