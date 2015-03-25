@@ -23,10 +23,10 @@ struct pias_sched_data
 /* Parameters */
 	struct Qdisc **queues; /* Priority queues where queues[0] has the highest priority*/
 	struct pias_rate_cfg rate;	
-	u64 bucket;	/* Token bucket depth/rate in nanoseconds */
+	//s64 bucket;	/* Token bucket depth/rate in nanoseconds */
 	
 /* Variables */
-	u64 tokens;	/* Tokens in nanoseconds */ 
+	s64 tokens;	/* Tokens in nanoseconds */ 
 	u32 sum_len;	/* The sum of lengh og all queues in bytes */
 	u32 max_len; 	/* Maximum value of sum_len*/
 	struct Qdisc *sch; 
@@ -39,6 +39,7 @@ struct pias_sched_data
  * 90=frame check sequence(8B)+Frame check sequence(4B)+Interpacket gap(12B)
  * +Ethernet header(14B)+IP header (20B)+TCP header(20B)+TCP options(12B in our testbed)
  * 24=frame check sequence(8B)+Frame check sequence(4B)+Interpacket gap(12B)
+ * 20=frame check sequence(8B)+Interpacket gap(12B)
  */
 static inline unsigned int skb_size(struct sk_buff *skb)
 {
@@ -76,8 +77,8 @@ static inline void pias_qdisc_ecn(struct sk_buff *skb)
 static struct Qdisc * pias_qdisc_classify(struct sk_buff *skb, struct Qdisc *sch)
 {
 	struct pias_sched_data *q = qdisc_priv(sch);	
-	int dscp;
 	struct iphdr* iph=ip_hdr(skb);
+	int dscp;
 	
 	if(unlikely(q->queues==NULL))
 		return NULL;
@@ -86,8 +87,8 @@ static struct Qdisc * pias_qdisc_classify(struct sk_buff *skb, struct Qdisc *sch
 	if(unlikely(iph==NULL))
 		return q->queues[0];
 
-	dscp=(int)(iph->tos>>2);
-	
+	dscp=(const int)(iph->tos>>2);
+
 	if(dscp==PIAS_QDISC_PRIO_DSCP_1)
 		return q->queues[0];
 	else if(dscp==PIAS_QDISC_PRIO_DSCP_2)
@@ -105,7 +106,6 @@ static struct Qdisc * pias_qdisc_classify(struct sk_buff *skb, struct Qdisc *sch
 	//By default, return the lowest priority queue
 	else //if(dscp==PIAS_QDISC_PRIO_DSCP_8)
 		return q->queues[7];
-		
 	return NULL;
 }
 
@@ -147,40 +147,39 @@ static struct sk_buff* pias_qdisc_dequeue(struct Qdisc *sch)
 {
 	struct pias_sched_data *q = qdisc_priv(sch);	
 	struct sk_buff *skb;
-	unsigned int len;
-	u64 now=ktime_to_ns(ktime_get());
-	s64 toks;
 	
 	skb = pias_qdisc_peek(sch);
 	if(skb)
 	{
-		toks=min_t(s64, now-q->time_ns, PIAS_QDISC_BUCKET_NS);
-		len=skb_size(skb);
+		s64 now=ktime_get_ns();
+		s64 toks=min_t(s64, now-q->time_ns, PIAS_QDISC_BUCKET_NS);
+		unsigned int len=skb_size(skb);
 		toks+=q->tokens;
-		//Bucket 
+		toks-=(s64)l2t_ns(&q->rate, len);
+		
+		//Bucket. 
 		if(toks>PIAS_QDISC_BUCKET_NS)
 			toks=PIAS_QDISC_BUCKET_NS;
-
-		toks-=(s64)l2t_ns(&q->rate, len);
+		
 		//If we have enough tokens to release this packet
 		if(toks>=0)
 		{
 			skb = pias_qdisc_dequeue_peeked(sch);		
 			if (unlikely(!skb))
 				return NULL;
-			q->time_ns = now;
-			q->tokens = toks;
+			q->time_ns=now;
 			q->sum_len-=len;
 			sch->q.qlen--;
-			printk(KERN_INFO "sch_pias: dequeue a packet with len=%u\n",len);
+			q->tokens=toks;
 			qdisc_unthrottled(sch);
 			qdisc_bstats_update(sch, skb);
+			printk(KERN_INFO "sch_pias: dequeue a packet with len=%u\n",len);
 			return skb;
 		}
 		else
 		{
 			//We use now+t due to absolute mode of hrtimer ((HRTIMER_MODE_ABS) ) 
-			qdisc_watchdog_schedule_ns(&q->watchdog,now+(u64)(-toks),true);
+			qdisc_watchdog_schedule_ns(&q->watchdog,now-toks,true);
 			qdisc_qstats_overlimit(sch);
 		}
 	}
@@ -278,8 +277,8 @@ static int pias_qdisc_init(struct Qdisc *sch, struct nlattr *opt)
 	if(q->queues == NULL)
 		return -ENOMEM;
 	
-	q->tokens = PIAS_QDISC_BUCKET_NS;
-	q->time_ns = ktime_to_ns(ktime_get());
+	q->tokens=0;
+	q->time_ns=ktime_get_ns();
 	//Mbps to bps
 	q->rate.rate_bps = PIAS_QDISC_RATE_MBPS*1000000;
 	pias_qdisc_precompute_ratedata(&q->rate);
