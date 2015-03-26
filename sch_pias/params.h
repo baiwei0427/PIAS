@@ -14,8 +14,6 @@
 
 /* Per-port ECN marking threshold in bytes */
 extern int PIAS_QDISC_ECN_THRESH_BYTES;
-/* Link speed in Mbps */
-extern int PIAS_QDISC_RATE_MBPS;
 /* Maximum sum of queue lenghs. It's similar to shared buffer per port on switches */
 extern int PIAS_QDISC_MAX_LEN_BYTES;
 /* Bucket size in nanosecond */

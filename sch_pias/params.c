@@ -5,14 +5,11 @@
 /* As recommended by DCTCP paper, we use 30KB for 1G network*/
 int PIAS_QDISC_ECN_THRESH_BYTES=30*1024;
 
-/* We use 995Mbps for Gigabit link with the hope of having small queues in the NIC.*/
-int PIAS_QDISC_RATE_MBPS=995;
-
 /* Maximum sum of queue lenghs. 1MB should be enough */ 
 int PIAS_QDISC_MAX_LEN_BYTES=1024*1024;
 
 /* Bucket size in nanosecond */
-int PIAS_QDISC_BUCKET_NS=4000000; 
+int PIAS_QDISC_BUCKET_NS=2000000; 
 
 /* DSCP values for different priorities */
 int PIAS_QDISC_PRIO_DSCP_1=7;
@@ -28,7 +25,6 @@ int PIAS_QDISC_PRIO_DSCP_8=0;
 /* All parameters that can be configured through sysctl */
 struct PIAS_QDISC_Param PIAS_QDISC_Params[16]={
 	{"PIAS_QDISC_ECN_THRESH_BYTES\0", &PIAS_QDISC_ECN_THRESH_BYTES},
-	{"PIAS_QDISC_RATE_MBPS\0", &PIAS_QDISC_RATE_MBPS},
 	{"PIAS_QDISC_MAX_LEN_BYTES\0", &PIAS_QDISC_MAX_LEN_BYTES},
 	{"PIAS_QDISC_BUCKET_NS\0",&PIAS_QDISC_BUCKET_NS},
 	{"PIAS_QDISC_PRIO_DSCP_1\0", &PIAS_QDISC_PRIO_DSCP_1},
