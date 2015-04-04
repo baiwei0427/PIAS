@@ -16,27 +16,23 @@
 #include "network.h"
 #include "params.h"
 
-MODULE_LICENSE("GPL");
-MODULE_AUTHOR("BAI Wei baiwei0427@gmail.com");
-MODULE_VERSION("1.2");
-MODULE_DESCRIPTION("Linux kernel module for PIAS (Practical Information-Agnostic flow Scheduling)");
-
-//FlowTable
+/* FlowTable */
 static struct PIAS_Flow_Table ft;
-//The hook for outgoing packets 
+/* The hook for outgoing packets */
 static struct nf_hook_ops pias_nf_hook_out;
-//The hook for incoming packets 
+/* The hook for incoming packets */
 static struct nf_hook_ops pias_nf_hook_in;
 
-//The following two functions are related to param_table_operation
-//To clear flow table: echo -n clear > /sys/module/pias/parameters/param_table_operation
-//To print flow table: echo -n print > /sys/module/pias/parameters/param_table_operation
+/*
+ * The following two functions are related to param_table_operation
+ * To clear flow table: echo -n clear > /sys/module/pias/parameters/param_table_operation
+ * To print flow table: echo -n print > /sys/module/pias/parameters/param_table_operation
+ */
 static int pias_set_operation(const char *val, struct kernel_param *kp);
 static int pias_noget(const char *val, struct kernel_param *kp);
-//static char *param_table_operation=NULL;
-//MODULE_PARM_DESC(param_table_operation, "Operation to flow table (Print or Clear)");
 module_param_call(param_table_operation, pias_set_operation, pias_noget, NULL, S_IWUSR); //Write permission by owner
 
+/* param_dev: NIC to operate PIAS */
 static char *param_dev=NULL;
 MODULE_PARM_DESC(param_dev, "Interface to operate PIAS");
 module_param(param_dev, charp, 0);
@@ -50,11 +46,11 @@ static int pias_set_operation(const char *val, struct kernel_param *kp)
 	//Clear flow table
 	if(strncmp(val,"clear\0",5)==0)
 	{
-		//spin_lock_irqsave(&(ft.tableLock),flags);
-		spin_lock_bh(&(ft.tableLock));
+		spin_lock_irqsave(&(ft.tableLock),flags);
+		//spin_lock_bh(&(ft.tableLock));
 		PIAS_Clear_Table(&ft);
-		spin_unlock_bh(&(ft.tableLock));
-		//spin_unlock_irqrestore(&(ft.tableLock),flags);
+		//spin_unlock_bh(&(ft.tableLock));
+		spin_unlock_irqrestore(&(ft.tableLock),flags);
 	}
 	//Print flow table
 	else if(strncmp(val,"print\0",5)==0)
@@ -75,7 +71,7 @@ static int pias_noget(const char *val, struct kernel_param *kp)
 	return 0;
 }
 
-//Hook function for outgoing packets
+/* Hook function for outgoing packets */
 static unsigned int pias_hook_func_out(unsigned int hooknum, struct sk_buff *skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *))
 {
 	struct iphdr *iph=NULL;	//IP  header structure
@@ -116,25 +112,25 @@ static unsigned int pias_hook_func_out(unsigned int hooknum, struct sk_buff *skb
 			f.info.latest_seq=ntohl(tcph->seq);	
 			f.info.latest_update_time=now;
 			//A new Flow entry should be inserted into FlowTable
-			//spin_lock_irqsave(&(ft.tableLock),flags);
-			spin_lock_bh(&(ft.tableLock));
+			spin_lock_irqsave(&(ft.tableLock),flags);
+			//spin_lock_bh(&(ft.tableLock));
 			if(PIAS_Insert_Table(&ft,&f,GFP_ATOMIC)==0)
 			{
 				printk(KERN_INFO "PIAS: insert fail\n");
 			}
-			spin_unlock_bh(&(ft.tableLock));
-			//spin_unlock_irqrestore(&(ft.tableLock),flags);
+			//spin_unlock_bh(&(ft.tableLock));
+			spin_unlock_irqrestore(&(ft.tableLock),flags);
 			dscp=PIAS_priority(0);
 		}
 		//TCP FIN/RST packets, connection will be closed 
 		else if(tcph->fin||tcph->rst)  
 		{
 			//An existing Flow entry should be deleted from FlowTable. 
-			//spin_lock_irqsave(&(ft.tableLock),flags);
-			spin_lock_bh(&(ft.tableLock));
+			spin_lock_irqsave(&(ft.tableLock),flags);
+			//spin_lock_bh(&(ft.tableLock));
 			result=PIAS_Delete_Table(&ft,&f);
-			spin_unlock_bh(&(ft.tableLock));
-			//spin_unlock_irqrestore(&(ft.tableLock),flags);
+			//spin_unlock_bh(&(ft.tableLock));
+			spin_unlock_irqrestore(&(ft.tableLock),flags);
 			//PIAS_Delete_Table returns bytes sent information of this flow
 			if(result==0)
 			{
@@ -153,8 +149,8 @@ static unsigned int pias_hook_func_out(unsigned int hooknum, struct sk_buff *skb
 				seq=seq+payload_len-1;
 			}
 			//Update existing Flow entry's information
-			//spin_lock_irqsave(&(ft.tableLock),flags);
-			spin_lock_bh(&(ft.tableLock));
+			spin_lock_irqsave(&(ft.tableLock),flags);
+			//spin_lock_bh(&(ft.tableLock));
 			infoPtr=PIAS_Search_Table(&ft,&f);
 			if(infoPtr!=NULL)
 			{
@@ -209,8 +205,8 @@ static unsigned int pias_hook_func_out(unsigned int hooknum, struct sk_buff *skb
 			{
 				dscp=PIAS_priority(0);
 			}
-			//spin_unlock_irqrestore(&(ft.tableLock),flags);
-			spin_unlock_bh(&(ft.tableLock));
+			spin_unlock_irqrestore(&(ft.tableLock),flags);
+			//spin_unlock_bh(&(ft.tableLock));
 		}
 		//Modify DSCP and make the packet ECT
 		PIAS_enable_ecn_dscp(skb,dscp);
@@ -218,7 +214,7 @@ static unsigned int pias_hook_func_out(unsigned int hooknum, struct sk_buff *skb
 	return NF_ACCEPT;	
 }
 
-//Hook function for incoming packets
+/* Hook function for incoming packets */
 static unsigned int pias_hook_func_in(unsigned int hooknum, struct sk_buff *skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *))
 {
 	struct iphdr *iph=NULL;	//IP  header structure
@@ -251,8 +247,8 @@ static unsigned int pias_hook_func_in(unsigned int hooknum, struct sk_buff *skb,
 			f.local_port=(u16)ntohs(tcph->dest);
 			f.remote_port=(u16)ntohs(tcph->source);
 			//Update existing Flow entry's information
-			spin_lock_bh(&(ft.tableLock));
-			//spin_lock_irqsave(&(ft.tableLock),flags);
+			//spin_lock_bh(&(ft.tableLock));
+			spin_lock_irqsave(&(ft.tableLock),flags);
 			infoPtr=PIAS_Search_Table(&ft,&f);
 			if(infoPtr!=NULL)
 			{
@@ -262,8 +258,8 @@ static unsigned int pias_hook_func_in(unsigned int hooknum, struct sk_buff *skb,
 					infoPtr->latest_ack=ack;
 				}
 			}
-			spin_unlock_bh(&(ft.tableLock));
-			//spin_unlock_irqrestore(&(ft.tableLock),flags);
+			//spin_unlock_bh(&(ft.tableLock));
+			spin_unlock_irqrestore(&(ft.tableLock),flags);
 		}
 	}
 	return NF_ACCEPT;
@@ -296,7 +292,7 @@ static int pias_module_init(void)
 	
 	//Register outgoing hook
 	pias_nf_hook_out.hook=pias_hook_func_out;                                    
-	pias_nf_hook_out.hooknum=NF_INET_LOCAL_OUT;       
+	pias_nf_hook_out.hooknum=NF_INET_POST_ROUTING;       
 	pias_nf_hook_out.pf=PF_INET;                                                       
 	pias_nf_hook_out.priority=NF_IP_PRI_FIRST;                            
 	nf_register_hook(&pias_nf_hook_out);              
@@ -304,7 +300,7 @@ static int pias_module_init(void)
 #ifdef ANTI_STARVATION
 	//Register incoming hook
 	pias_nf_hook_in.hook=pias_hook_func_in;					                  
-	pias_nf_hook_in.hooknum=NF_INET_LOCAL_IN;			
+	pias_nf_hook_in.hooknum=NF_INET_PRE_ROUTING;			
 	pias_nf_hook_in.pf=PF_INET;							                          
 	pias_nf_hook_in.priority=NF_IP_PRI_FIRST;			              
 	nf_register_hook(&pias_nf_hook_in);		                   
@@ -331,4 +327,9 @@ static void pias_module_exit(void)
 
 module_init(pias_module_init);
 module_exit(pias_module_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("BAI Wei baiwei0427@gmail.com");
+MODULE_VERSION("1.2");
+MODULE_DESCRIPTION("Linux kernel module for PIAS (Practical Information-Agnostic flow Scheduling)");
 

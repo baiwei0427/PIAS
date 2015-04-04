@@ -23,8 +23,7 @@ struct PIAS_Flow_Info
 	u16 timeouts;
 };
 
-//Define structure of a TCP flow
-//A TCP Flow is defined by 4-tuple <local_ip,remote_ip,local_port,remote_port> and its related information
+/* A TCP Flow is defined by 4-tuple <local_ip,remote_ip,local_port,remote_port> and its related information */
 struct PIAS_Flow
 {
 	u32 local_ip;	//Local IP address
@@ -34,21 +33,21 @@ struct PIAS_Flow
 	struct PIAS_Flow_Info info;	//Information for this flow
 };
 
-//Link Node of Flow
+/* Link Node of Flow */
 struct PIAS_Flow_Node
 {
 	struct PIAS_Flow f;	//structure of Flow
 	struct PIAS_Flow_Node* next;	//pointer to next node 
 };
 
-//Link List of Flows
+/* Link List of Flows */
 struct PIAS_Flow_List
 {
 	struct PIAS_Flow_Node* head;	//pointer to head node of this link list
 	unsigned int len;	//current length of this list 
 };
 
-//Hash Table of Flows
+/* Hash Table of Flows */
 struct PIAS_Flow_Table
 {
 	struct PIAS_Flow_List* table;	//many FlowList 
@@ -56,7 +55,7 @@ struct PIAS_Flow_Table
 	spinlock_t tableLock;
 };
 
-//Print functions
+/* Print functions */
 void PIAS_Print_Flow(struct PIAS_Flow* f, int type);
 void PIAS_Print_Node(struct PIAS_Flow_Node* fn);
 void PIAS_Print_List(struct PIAS_Flow_List* fl);
@@ -65,30 +64,30 @@ void PIAS_Print_Table(struct PIAS_Flow_Table* ft);
 inline unsigned int PIAS_Hash(struct PIAS_Flow* f);
 inline bool PIAS_Equal(struct PIAS_Flow* f1,struct PIAS_Flow* f2);
 
-//Initialization functions
+/* Initialization functions */
 void PIAS_Init_Info(struct PIAS_Flow_Info* info);
 void PIAS_Init_Flow(struct PIAS_Flow* f);
 void PIAS_Init_Node(struct PIAS_Flow_Node* fn);
 void PIAS_Init_List(struct PIAS_Flow_List* fl);
 void PIAS_Init_Table(struct PIAS_Flow_Table* ft);
 
-//Insert functions: insert a new flow entry to flow table/list
+/* Insert functions: insert a new flow entry to flow table/list */
 unsigned int PIAS_Insert_List(struct PIAS_Flow_List* fl, struct PIAS_Flow* f, int flags);
 unsigned int PIAS_Insert_Table(struct PIAS_Flow_Table* ft,struct PIAS_Flow* f, int flags);
 
-//Search functions: search a flow entry from flow table/list
+/* Search functions: search a flow entry from flow table/list */
 struct PIAS_Flow_Info* PIAS_Search_List(struct PIAS_Flow_List* fl, struct PIAS_Flow* f);
 struct PIAS_Flow_Info* PIAS_Search_Table(struct PIAS_Flow_Table* ft, struct PIAS_Flow* f);
 
-//Delete functions: delete a flow entry from flow table/list
+/* Delete functions: delete a flow entry from flow table/list */
 u32 PIAS_Delete_List(struct PIAS_Flow_List* fl, struct PIAS_Flow* f);
 u32 PIAS_Delete_Table(struct PIAS_Flow_Table* ft,struct PIAS_Flow* f);
 
-//Clear functions: clear flow entries from flow table/list
+/* Clear functions: clear flow entries from flow table/list */
 void PIAS_Clear_List(struct PIAS_Flow_List* fl);
 void PIAS_Clear_Table(struct PIAS_Flow_Table* ft);
 
-//Exit functions: delete whole flow table
+/* Exit functions: delete whole flow table */
 void PIAS_Exit_List(struct PIAS_Flow_List* fl);
 void PIAS_Exit_Table(struct PIAS_Flow_Table* ft);
 

@@ -5,8 +5,7 @@
 #include "network.h"
 #include "params.h"
 
-//Based on size, return DSCP value
-//We have 8 priorities at most.
+/* Based on size, return DSCP value. We have 8 priorities at most. */
 u8 PIAS_priority(u32 size)
 {
 	if(size<=PIAS_PRIO_THRESH_1)
@@ -27,7 +26,7 @@ u8 PIAS_priority(u32 size)
 		return (u8)PIAS_PRIO_DSCP_8;
 }
 
-//mark DSCP and enable ECN
+/* mark DSCP and enable ECN */
 inline void PIAS_enable_ecn_dscp(struct sk_buff *skb, u8 dscp)
 {
 	if(skb_make_writable(skb,sizeof(struct iphdr)))
@@ -36,10 +35,12 @@ inline void PIAS_enable_ecn_dscp(struct sk_buff *skb, u8 dscp)
 	}
 }
 
-//Maximum unsigned 32-bit integer value: 4294967295
-//Function: determine whether seq1 is larger than seq2
-//If Yes, return 1. Else, return 0.
-//We use a simple heuristic to handle wrapped TCP sequence number 
+/*
+ * Maximum unsigned 32-bit integer value: 4294967295
+ * Function: determine whether seq1 is larger than seq2
+ * If Yes, return 1. Else, return 0.
+ * We use a simple heuristic to handle wrapped TCP sequence number.
+ */ 
 inline bool PIAS_is_seq_larger(u32 seq1, u32 seq2)
 {
 	if(likely(seq1>seq2&&seq1-seq2<=4294900000))
@@ -50,6 +51,7 @@ inline bool PIAS_is_seq_larger(u32 seq1, u32 seq2)
 		return 0;
 }
 
+/* Calculate gap between seq1 and seq2 */
 u32 PIAS_seq_gap(u32 seq1, u32 seq2)
 {
 	//seq1 is larger seq2

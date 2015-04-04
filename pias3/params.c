@@ -2,28 +2,28 @@
 #include <linux/sysctl.h>
 #include <linux/string.h>
 
-const int PIAS_RTO_MIN=8*1000;
-const int PIAS_TIMEOUT_THRESH=2;
-const int PIAS_SEQ_GAP_THRESH=3*1448;
+int PIAS_RTO_MIN=8*1000;
+int PIAS_TIMEOUT_THRESH=2;
+int PIAS_SEQ_GAP_THRESH=3*1448;
  
-const int PIAS_PRIO_DSCP_1=7;
-const int PIAS_PRIO_DSCP_2=6;
-const int PIAS_PRIO_DSCP_3=5;
-const int PIAS_PRIO_DSCP_4=4;
-const int PIAS_PRIO_DSCP_5=3;
-const int PIAS_PRIO_DSCP_6=2;
-const int PIAS_PRIO_DSCP_7=1;
-const int PIAS_PRIO_DSCP_8=0;
+int PIAS_PRIO_DSCP_1=7;
+int PIAS_PRIO_DSCP_2=6;
+int PIAS_PRIO_DSCP_3=5;
+int PIAS_PRIO_DSCP_4=4;
+int PIAS_PRIO_DSCP_5=3;
+int PIAS_PRIO_DSCP_6=2;
+int PIAS_PRIO_DSCP_7=1;
+int PIAS_PRIO_DSCP_8=0;
 
-const int PIAS_PRIO_THRESH_1=20*1024;
-const int PIAS_PRIO_THRESH_2=2147483647;
-const int PIAS_PRIO_THRESH_3=2147483647;
-const int PIAS_PRIO_THRESH_4=2147483647;
-const int PIAS_PRIO_THRESH_5=2147483647;
-const int PIAS_PRIO_THRESH_6=2147483647;
-const int PIAS_PRIO_THRESH_7=2147483647;
+int PIAS_PRIO_THRESH_1=20*1024;
+int PIAS_PRIO_THRESH_2=2147483647;
+int PIAS_PRIO_THRESH_3=2147483647;
+int PIAS_PRIO_THRESH_4=2147483647;
+int PIAS_PRIO_THRESH_5=2147483647;
+int PIAS_PRIO_THRESH_6=2147483647;
+int PIAS_PRIO_THRESH_7=2147483647;
 
-//All parameters that can be configured through sysctl
+/* All parameters that can be configured through sysctl */
 struct PIAS_param PIAS_params[32]={
 	{"PIAS_RTO_MIN\0", &PIAS_RTO_MIN},
 	{"PIAS_TIMEOUT_THRESH\0", &PIAS_TIMEOUT_THRESH},
@@ -68,17 +68,8 @@ int PIAS_params_init(void)
 		entry->procname=PIAS_params[i].name;
 		entry->data=PIAS_params[i].ptr;
 		entry->mode=0644;
-		//If this variable is for DSCP 
-		/*if(strncmp(entry->procname,"PIAS_PRIO_D\0",strlen("PIAS_PRIO_D\0"))==0)
-		{
-			entry->proc_handler=&proc_dointvec;
-			entry->maxlen=sizeof(int);
-		}
-		else
-		{*/
 		entry->proc_handler=&proc_dointvec;
 		entry->maxlen=sizeof(int);
-		//}
 	}
 	
 	PIAS_sysctl=register_sysctl_paths(PIAS_params_path, PIAS_params_table);

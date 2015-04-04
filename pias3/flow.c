@@ -4,8 +4,7 @@
 #include "flow.h"
 #include "params.h"
 
-//Print a flow information
-//Type: Add(0) Delete(1)
+/* Print a flow information. Type: Add(0) Delete(1) */
 void PIAS_Print_Flow(struct PIAS_Flow* f, int type)
 {		
 	char local_ip[16]={0};           	//Local IP address 
@@ -28,13 +27,13 @@ void PIAS_Print_Flow(struct PIAS_Flow* f, int type)
 	}
 }
 
-//Print a FlowNode
+/* Print a FlowNode */
 void PIAS_Print_Node(struct PIAS_Flow_Node* fn)
 {		
 	PIAS_Print_Flow(&(fn->f),2);
 }
 
-//Print a FlowList
+/* Print a FlowList */
 void PIAS_Print_List(struct PIAS_Flow_List* fl)
 {		
 	struct PIAS_Flow_Node* Ptr;
@@ -44,7 +43,7 @@ void PIAS_Print_List(struct PIAS_Flow_List* fl)
 	}
 }
 
-//Print a FlowTable
+/* Print a FlowTable */
 void PIAS_Print_Table(struct PIAS_Flow_Table* ft)
 {		
 	int i=0;
@@ -60,15 +59,14 @@ void PIAS_Print_Table(struct PIAS_Flow_Table* ft)
 	printk(KERN_INFO "PIAS: there are %u flows in total\n",ft->size);
 }
 
-//Hash function, calculate the flow should be inserted into which PIAS_Flow_List
+/* Hash function, calculate the flow should be inserted into which PIAS_Flow_List */
 inline unsigned int PIAS_Hash(struct PIAS_Flow* f)
 {		
 	//return a value in [0,HASH_RANGE-1]
 	return ((f->local_ip/(256*256*256)+1)*(f->remote_ip/(256*256*256)+1)*(f->local_port+1)*(f->remote_port+1))%PIAS_HASH_RANGE;
 }
 
-//Determine whether two Flows are equal 
-//<local_ip, remote_ip, local_port, remote_port> determines a flow
+/* Determine whether two Flows are equal. <local_ip, remote_ip, local_port, remote_port> determines a flow */
 inline bool PIAS_Equal(struct PIAS_Flow* f1,struct PIAS_Flow* f2)
 {
 	return ((f1->local_ip==f2->local_ip)
@@ -77,7 +75,7 @@ inline bool PIAS_Equal(struct PIAS_Flow* f1,struct PIAS_Flow* f2)
 	&&(f1->remote_port==f2->remote_port));		
 }
 
-//Initialize the info of a Flow
+/* Initialize the info of a Flow */
 void PIAS_Init_Info(struct PIAS_Flow_Info* info)
 {
 	//We need to initialize 6 variables in total
@@ -89,7 +87,7 @@ void PIAS_Init_Info(struct PIAS_Flow_Info* info)
 	info->timeouts=0;
 }
 
-//Initialize a Flow
+/* Initialize a Flow */
 void PIAS_Init_Flow(struct PIAS_Flow* f)
 {
 	f->local_ip=0;	
@@ -101,7 +99,7 @@ void PIAS_Init_Flow(struct PIAS_Flow* f)
 	PIAS_Init_Info(&(f->info));
 }
 
-//Initialize a FlowNode
+/* Initialize a FlowNode */
 void PIAS_Init_Node(struct PIAS_Flow_Node* fn)
 {
 	//Initialize next pointer as null
@@ -110,7 +108,7 @@ void PIAS_Init_Node(struct PIAS_Flow_Node* fn)
 	PIAS_Init_Flow(&(fn->f));
 }
 
-//Initialize a FlowList
+/* Initialize a FlowList */
 void PIAS_Init_List(struct PIAS_Flow_List* fl)
 {
 	struct PIAS_Flow_Node* buf=NULL;
@@ -129,7 +127,7 @@ void PIAS_Init_List(struct PIAS_Flow_List* fl)
 	}
 }
 
-//Initialize a FlowTable
+/* Initialize a FlowTable */
 void PIAS_Init_Table(struct PIAS_Flow_Table* ft)
 {
 	int i=0;
@@ -156,7 +154,7 @@ void PIAS_Init_Table(struct PIAS_Flow_Table* ft)
 	spin_lock_init(&(ft->tableLock));
 }
 
-//Insert a Flow into a FlowList and return 1 if it succeeds
+/* Insert a Flow into a FlowList and return 1 if it succeeds */
 unsigned int PIAS_Insert_List(struct PIAS_Flow_List* fl, struct PIAS_Flow* f, int flags)
 {
 	if(fl->len>=PIAS_LIST_SIZE) 
@@ -209,7 +207,7 @@ unsigned int PIAS_Insert_List(struct PIAS_Flow_List* fl, struct PIAS_Flow* f, in
 	}
 }
 
-//Insert a flow to FlowTable and return 1 if it succeeds
+/* Insert a flow to FlowTable and return 1 if it succeeds */
 unsigned int PIAS_Insert_Table(struct PIAS_Flow_Table* ft,struct PIAS_Flow* f, int flags)
 {
 	unsigned int result=0;
@@ -224,7 +222,7 @@ unsigned int PIAS_Insert_Table(struct PIAS_Flow_Table* ft,struct PIAS_Flow* f, i
 	return result;
 }
 
-//Search and return the pointer of information for a given flow in a FlowList
+/* Search and return the pointer of information for a given flow in a FlowList */
 struct PIAS_Flow_Info* PIAS_Search_List(struct PIAS_Flow_List* fl, struct PIAS_Flow* f)
 {
 	//The length of FlowList is 0
@@ -259,7 +257,7 @@ struct PIAS_Flow_Info* PIAS_Search_List(struct PIAS_Flow_List* fl, struct PIAS_F
 	return NULL;
 }
 
-//Search the information for a given Flow in a FlowTable
+/* Search the information for a given Flow in a FlowTable */
 struct PIAS_Flow_Info* PIAS_Search_Table(struct PIAS_Flow_Table* ft, struct PIAS_Flow* f)
 {
 	unsigned int index=0;
@@ -267,7 +265,7 @@ struct PIAS_Flow_Info* PIAS_Search_Table(struct PIAS_Flow_Table* ft, struct PIAS
 	return PIAS_Search_List(&(ft->table[index]),f);
 }
 
-//Delete a Flow from FlowList and return the bytes_sent(>=1) of this flow if it succeeds
+/* Delete a Flow from FlowList and return the bytes_sent(>=1) of this flow if it succeeds */
 u32 PIAS_Delete_List(struct PIAS_Flow_List* fl, struct PIAS_Flow* f)
 {
 	u32 result=0;
@@ -293,7 +291,7 @@ u32 PIAS_Delete_List(struct PIAS_Flow_List* fl, struct PIAS_Flow* f)
 			//Find the matching flow (matching FlowNode is tmp->next rather than tmp), delete flow and return
 			else if(PIAS_Equal(&(tmp->next->f),f)==1) 
 			{
-				result=max(1,tmp->next->f.info.bytes_sent);
+				result=max_t(u32,1,tmp->next->f.info.bytes_sent);
 				s=tmp->next;
 				//Print_Flow(&(tmp->next->f),2);
 				tmp->next=s->next;
@@ -315,7 +313,7 @@ u32 PIAS_Delete_List(struct PIAS_Flow_List* fl, struct PIAS_Flow* f)
 	}
 }
 
-//Delete a Flow from FlowTable and return bytes_sent (>=1) of this flow if it succeeds
+/* Delete a Flow from FlowTable and return bytes_sent (>=1) of this flow if it succeeds */
 u32 PIAS_Delete_Table(struct PIAS_Flow_Table* ft, struct PIAS_Flow* f)
 {
 	u32 result=0;
