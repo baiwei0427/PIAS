@@ -76,6 +76,7 @@ I have only tested this qdisc module in Linux kernel 3.18.9. If you want to port
 
 <pre><code>$ rmmod sch_tbf<br/>
 $ cd sch_pias<br/>
+$ make
 $ insmod sch_pias.ko<br/>
 $ tc qdisc add dev eth1 root tbf rate 995mbit limit 1000k burst 1000k mtu 66000 peakrate 1000mbit<br/>
 $ dmesg|tail<br/>
