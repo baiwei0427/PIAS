@@ -4,7 +4,7 @@
 #include "params.h"
 
 //Idle time in us
-int PIAS_IDLE_TIME = 3 * 1000;
+int PIAS_IDLE_TIME = 500;
 //RTOmin in us
 int PIAS_RTO_MIN = 8 * 1000;
 //Threshold of consecutive TCP timeouts to reset priority

@@ -8,7 +8,8 @@
 //Hash range (Number of flow lists)
 #define PIAS_HASH_RANGE 256
 
-/* Define structure of information for a TCP flow
+/*
+ * Define structure of information for a TCP flow (connections)
  * last_copy_time: last time when we observe data copy from user space to kernel TCP send buffer
  * last_update_time: last time when we observe an outgoing packet (from local side to remote side)
  * last_timeout_seq: sequence number for the lastest TCP timeout
@@ -16,6 +17,7 @@
  * last_ack: the latest (largest) ACK number for outoging traffic
  * bytes_sent: bytes sent of outgoing traffic
  * timeouts: the number of consecutive timeouts experienced by outgoing traffic
+ * messages: the number of messages in this TCP connections
  */
 
 struct PIAS_Flow_Info
@@ -27,6 +29,7 @@ struct PIAS_Flow_Info
 	u32 last_ack;
 	u32 bytes_sent;
 	u16 timeouts;
+    u16 messages;
 };
 
 /* A TCP Flow is defined by 4-tuple <local_ip,remote_ip,local_port,remote_port> and its related information */

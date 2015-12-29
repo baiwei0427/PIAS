@@ -11,6 +11,7 @@
 #include <linux/netfilter_ipv4.h>
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
+#include <linux/kprobes.h>
 
 #include "flow.h"
 #include "network.h"
@@ -22,6 +23,15 @@ static struct PIAS_Flow_Table ft;
 static struct nf_hook_ops pias_nf_hook_out;
 /* The hook for incoming packets */
 static struct nf_hook_ops pias_nf_hook_in;
+/* Hook inserted to be called before each socket call.
+ * Note: arguments must match tcp_sendmsg()! */
+static int jtcp_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg, size_t size);
+
+static struct jprobe pias_tcp_sendmsg =
+{
+	.kp = { .symbol_name = "tcp_sendmsg",},
+	.entry = jtcp_sendmsg,
+};
 
 /*
  * The following two functions are related to param_table_operation
@@ -36,6 +46,10 @@ module_param_call(param_table_operation, pias_set_operation, pias_noget, NULL, S
 static char *param_dev = NULL;
 MODULE_PARM_DESC(param_dev, "Interface to operate PIAS");
 module_param(param_dev, charp, 0);
+
+static int param_port __read_mostly = 0;
+MODULE_PARM_DESC(param_port, "Port to match (0=all)");
+module_param(param_port, int, 0);
 
 static int pias_set_operation(const char *val, struct kernel_param *kp)
 {
@@ -55,6 +69,56 @@ static int pias_set_operation(const char *val, struct kernel_param *kp)
 
 static int pias_noget(const char *val, struct kernel_param *kp)
 {
+	return 0;
+}
+
+/* Hook inserted to be called before each socket call.
+ * Note: arguments must match tcp_sendmsg()! */
+static int jtcp_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg, size_t size)
+{
+	struct PIAS_Flow f;	//PIAS flow structure
+	struct PIAS_Flow *ptr = NULL;	//pointer to PIAS flow structure
+	ktime_t now = ktime_get();	//get current time
+	const struct tcp_sock *tp = tcp_sk(sk);
+	const struct inet_sock *inet = inet_sk(sk);
+	s64 idle_time = 0;	//idle time in us
+	unsigned long flags;
+
+	f.local_ip = inet->inet_saddr;
+	f.remote_ip = inet->inet_daddr;
+	f.local_port = (u16)ntohs(inet->inet_sport);
+	f.remote_port = (u16)ntohs(inet->inet_dport);
+
+	if (param_port == 0 || f.local_port == param_port || f.remote_port == param_port)
+	{
+		ptr = PIAS_Search_Table(&ft, &f);
+		if (ptr)
+		{
+			spin_lock_irqsave(&(ptr->lock), flags);
+			//First message in this connections
+			if (ptr->info.last_copy_time.tv64 == 0)
+			{
+				ptr->info.messages++;
+				if (PIAS_DEBUG_MODE)
+					printk(KERN_INFO "Meesage %hu is detected on TCP connection %pI4:%hu to %pI4:%hu\n", ptr->info.messages, &(f.local_ip), f.local_port, &(f.remote_ip), f.remote_port);
+			}
+			else if(tp->snd_nxt == tp->write_seq)
+			{
+				idle_time = ktime_us_delta(now, ptr->info.last_copy_time);
+				if (idle_time > PIAS_IDLE_TIME)
+				{
+					ptr->info.bytes_sent = 0;
+					ptr->info.messages++;
+					if (PIAS_DEBUG_MODE)
+						printk(KERN_INFO "Message %hu is detected on TCP connection %pI4:%hu to %pI4:%hu after %lld us idle time\n", ptr->info.messages, &(f.local_ip), f.local_port, &(f.remote_ip), f.remote_port, idle_time);
+				}
+			}
+			ptr->info.last_copy_time = now;
+			spin_unlock_irqrestore(&(ptr->lock), flags);
+		}
+	}
+
+	jprobe_return();
 	return 0;
 }
 
@@ -88,6 +152,10 @@ static unsigned int pias_hook_func_out(unsigned int hooknum, struct sk_buff *skb
 	if (iph->protocol == IPPROTO_TCP)
 	{
 		tcph = (struct tcphdr *)((__u32 *)iph + iph->ihl);
+
+		if (param_port != 0 && ntohs(tcph->source) != param_port && ntohs(tcph->dest) != param_port)
+			return NF_ACCEPT;
+
 		PIAS_Init_Flow(&f);
 		f.local_ip = iph->saddr;
 		f.remote_ip = iph->daddr;
@@ -135,14 +203,7 @@ static unsigned int pias_hook_func_out(unsigned int hooknum, struct sk_buff *skb
 					//Update sequence number
 					ptr->info.last_seq = seq;
 					//Update bytes sent
-                    if (idle_time >= PIAS_IDLE_TIME)
-                    {
-                        if (PIAS_DEBUG_MODE == 1)
-                            printk(KERN_INFO "A new message is dected after %lld us idle time\n", idle_time);
-                        ptr->info.bytes_sent = 0;
-                    }
-                    else
-				        ptr->info.bytes_sent += payload_len;
+					ptr->info.bytes_sent += payload_len;
 				}
 				//TCP timeout?
 				else if (idle_time >= PIAS_RTO_MIN && pias_is_seq_larger(ptr->info.last_seq, ptr->info.last_ack))
@@ -209,6 +270,10 @@ static unsigned int pias_hook_func_in(unsigned int hooknum, struct sk_buff *skb,
 	if (iph->protocol == IPPROTO_TCP)
 	{
 		tcph = (struct tcphdr *)((__u32 *)iph + iph->ihl);
+
+		if (param_port != 0 && ntohs(tcph->source) != param_port && ntohs(tcph->dest) != param_port)
+			return NF_ACCEPT;
+
 		if (tcph->ack)
 		{
             //TCP payload length=Total IP length - IP header length-TCP header length
@@ -237,6 +302,8 @@ static unsigned int pias_hook_func_in(unsigned int hooknum, struct sk_buff *skb,
 static int pias_module_init(void)
 {
 	int i = 0;
+	int ret = -ENOMEM;
+
     //Get interface
     if (param_dev==NULL)
     {
@@ -259,27 +326,39 @@ static int pias_module_init(void)
 	//Initialize FlowTable
 	PIAS_Init_Table(&ft);
 
-	//Register outgoing hook
+	//Register outgoing Netfilter hook
 	pias_nf_hook_out.hook = pias_hook_func_out;
 	pias_nf_hook_out.hooknum = NF_INET_POST_ROUTING;
 	pias_nf_hook_out.pf = PF_INET;
 	pias_nf_hook_out.priority = NF_IP_PRI_FIRST;
 	nf_register_hook(&pias_nf_hook_out);
 
-	//Register incoming hook
+	//Register incoming Netfilter hook
 	pias_nf_hook_in.hook = pias_hook_func_in;
 	pias_nf_hook_in.hooknum = NF_INET_PRE_ROUTING;
 	pias_nf_hook_in.pf = PF_INET;
 	pias_nf_hook_in.priority = NF_IP_PRI_FIRST;
 	nf_register_hook(&pias_nf_hook_in);
 
-	printk(KERN_INFO "PIAS: start on %s\n", param_dev);
+	//Register jprobe hook
+	BUILD_BUG_ON(__same_type(tcp_sendmsg, jtcp_sendmsg) == 0);
+	ret = register_jprobe(&pias_tcp_sendmsg);
+	if (ret)
+	{
+		printk(KERN_INFO "Cannot register the hook for tcp_sendmsg\n");
+		return ret;
+	}
+
+	printk(KERN_INFO "PIAS: start on %s (TCP port %d)\n", param_dev, param_port);
 	return 0;
 }
 
 static void pias_module_exit(void)
 {
-	//Unregister two hooks
+	//Unregister jprobe hook
+	unregister_jprobe(&pias_tcp_sendmsg);
+
+	//Unregister two Netfilter hooks
 	nf_unregister_hook(&pias_nf_hook_out);
 	nf_unregister_hook(&pias_nf_hook_in);
 

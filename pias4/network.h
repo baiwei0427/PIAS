@@ -4,8 +4,6 @@
 #include <linux/skbuff.h>
 #include <linux/types.h>
 
-#include "params.h"
-
 /* Decide priority (DSCP) */
 inline u8 pias_priority(u32 size);
 /* Enable ECN and mark DSCP */

@@ -101,6 +101,7 @@ bool PIAS_Init_Info(struct PIAS_Flow_Info* info)
         info->last_ack = 0;
         info->bytes_sent = 0;
         info->timeouts = 0;
+		info->messages = 0;
         return true;
     }
     else
