@@ -31,8 +31,8 @@ struct PIAS_Param
 
 extern struct PIAS_Param PIAS_Params[2 * PIAS_PRIO_NUM + 6];
 
-/* Intialize parameters and register sysctl */
-int PIAS_Params_Init(void);
+/* Intialize parameters and register sysctl. Return true if it succeeds. */
+bool PIAS_Params_Init(void);
 /* Unregister sysctl */
 void PIAS_Params_Exit(void);
 

@@ -6,7 +6,7 @@
 //Idle time in us
 int PIAS_IDLE_TIME = 500;
 //RTOmin in us
-int PIAS_RTO_MIN = 8 * 1000;
+int PIAS_RTO_MIN = 9 * 1000;
 //Threshold of consecutive TCP timeouts to reset priority
 int PIAS_TIMEOUT_THRESH = 3;
 //Sequence gap in bytes to identify consecutive TCP timeouts
@@ -14,10 +14,11 @@ int PIAS_TIMEOUT_SEQ_GAP = 3 * 1448;
 //Shall we enable aging to prevent long-term starvation
 int PIAS_ENABLE_AGING = 1;
 //Shall we enable debug mode
-int PIAS_DEBUG_MODE = 1;
+int PIAS_DEBUG_MODE = 0;
 
 int PIAS_PRIO_DSCP[PIAS_PRIO_NUM] = {7, 6, 5, 4, 3, 2, 1, 0};
-int PIAS_PRIO_THRESH[PIAS_PRIO_NUM - 1] = {100 * 1024, 2147483647, 2147483647, 2147483647, 2147483647, 2147483647, 2147483647};
+//int PIAS_PRIO_THRESH[PIAS_PRIO_NUM - 1] = {909*1460, 1329*1460, 1648*1460, 1960*1460, 2143*1460, 2337*1460, 2484*1460};
+int PIAS_PRIO_THRESH[PIAS_PRIO_NUM - 1] = {745*1460, 1083*1460, 1391*1460, 13689*1460, 14396*1460, 21149*1460, 27245*1460};
 
 struct PIAS_Param PIAS_Params[2 * PIAS_PRIO_NUM + 6] =
 {
@@ -40,7 +41,7 @@ struct ctl_path PIAS_Params_Path[] =
 struct ctl_table_header *PIAS_Sysctl = NULL;
 
 /* Intialize parameters and register sysctl */
-int PIAS_Params_Init(void)
+bool PIAS_Params_Init(void)
 {
     int i = 0;
     struct ctl_table *entry = NULL;
@@ -80,9 +81,9 @@ int PIAS_Params_Init(void)
     PIAS_Sysctl = register_sysctl_paths(PIAS_Params_Path, PIAS_Params_Table);
 
     if (PIAS_Sysctl)
-        return 0;
+        return true;
     else
-        return -1;
+        return false;
 }
 
 /* Unregister sysctl */
