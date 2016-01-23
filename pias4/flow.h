@@ -23,12 +23,12 @@
 struct PIAS_Flow_Info
 {
     ktime_t last_copy_time;
-	ktime_t last_update_time;
-	u32 last_timeout_seq;
-	u32 last_seq;
-	u32 last_ack;
-	u32 bytes_sent;
-	u16 timeouts;
+    ktime_t last_update_time;
+    u32 last_timeout_seq;
+    u32 last_seq;
+    u32 last_ack;
+    u32 bytes_sent;
+    u16 timeouts;
     u16 messages;
 };
 
@@ -47,15 +47,15 @@ struct PIAS_Flow
 /* Link List of Flows */
 struct PIAS_Flow_List
 {
-	struct list_head head_node;    //head node of the flow list
-	unsigned int len;  //total number of flows in the list
+    struct list_head head_node;    //head node of the flow list
+    unsigned int len;  //total number of flows in the list
     spinlock_t lock;    //lock for this flow list
 };
 
 /* Hash Table of Flows */
 struct PIAS_Flow_Table
 {
-	struct PIAS_Flow_List* flow_lists;  //array of linked lists to store per-flow information
+    struct PIAS_Flow_List* flow_lists;  //array of linked lists to store per-flow information
     atomic_t size;
 };
 

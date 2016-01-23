@@ -10,8 +10,8 @@ void PIAS_Print_Flow(struct PIAS_Flow* f, char* operation)
 	char local_ip[16] = {0};   //Local IP address
 	char remote_ip[16] = {0};  //Remote IP address
 
-    if (unlikely(!f))
-    {
+	if (unlikely(!f))
+	{
 		printk(KERN_INFO "PIAS_Print_Flow: NULL pointer\n");
 		return;
 	}
@@ -19,10 +19,10 @@ void PIAS_Print_Flow(struct PIAS_Flow* f, char* operation)
 	snprintf(local_ip, 16, "%pI4", &(f->local_ip));
 	snprintf(remote_ip, 16, "%pI4", &(f->remote_ip));
 
-    if (operation)
+	if (operation)
 		printk(KERN_INFO "PIAS: %s a flow record from %s:%hu to %s:%hu bytes_sent=%u seq=%u ACK=%u\n", operation, local_ip, f->local_port, remote_ip, f->remote_port, f->info.bytes_sent, f->info.last_seq, f->info.last_ack);
-    else
-        printk(KERN_INFO "PIAS: a flow record from %s:%hu to %s:%hu bytes_sent=%u seq=%u ACK=%u\n", local_ip, f->local_port, remote_ip, f->remote_port, f->info.bytes_sent, f->info.last_seq, f->info.last_ack);
+	else
+    	printk(KERN_INFO "PIAS: a flow record from %s:%hu to %s:%hu bytes_sent=%u seq=%u ACK=%u\n", local_ip, f->local_port, remote_ip, f->remote_port, f->info.bytes_sent, f->info.last_seq, f->info.last_ack);
 }
 
 /* Print a Flow List */

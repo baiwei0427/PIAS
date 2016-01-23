@@ -31,8 +31,8 @@ static unsigned int pias_hook_func_out(unsigned int hooknum, struct sk_buff *skb
     struct PIAS_Flow f;    //PIAS flow structure
     struct PIAS_Flow *ptr = NULL;   //pointer to PIAS flow structure
     unsigned long flags;   //variable for save current states of irq
-    u8 dscp = 0;   //DSCP value
-    u16 payload_len = 0;	//TCP payload length
+    int dscp = 0;   //DSCP value
+    u16 payload_len = 0;    //TCP payload length
     u32 seq = 0;	//TCP sequence number
     u32 result = 0;	//Delete_Table return result
     s64 idle_time = 0;
@@ -69,7 +69,7 @@ static unsigned int pias_hook_func_out(unsigned int hooknum, struct sk_buff *skb
 			f.info.last_seq = ntohl(tcph->seq);
 			f.info.last_update_time = now;
 			//A new Flow entry should be inserted into FlowTable
-			if (!PIAS_Insert_Table(&ft,&f,GFP_ATOMIC))
+			if (!PIAS_Insert_Table(&ft, &f, GFP_ATOMIC))
 				printk(KERN_INFO "PIAS: insert fail\n");
 
 			dscp = pias_priority(0);
@@ -140,7 +140,13 @@ static unsigned int pias_hook_func_out(unsigned int hooknum, struct sk_buff *skb
                 dscp = pias_priority(0);
 		}
         //Modify DSCP and make the packet ECT
-        pias_enable_ecn_dscp(skb, dscp);
+        //If DSCP < 0, it suggests that we should not modify this packet
+        if (dscp >= 0)
+        {
+            if (PIAS_DEBUG_MODE == 1)
+                printk(KERN_INFO "Modify DSCP field to %d (packet size %u)\n", dscp, skb->len);
+            pias_enable_ecn_dscp(skb, (u8)dscp);
+        }
 	}
 	return NF_ACCEPT;
 }

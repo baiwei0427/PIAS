@@ -6,7 +6,7 @@
 #include "params.h"
 
 /* Based on size, return DSCP value of corresponding priority. */
-u8 pias_priority(u32 size)
+int pias_priority(u32 size)
 {
     int i = 0;
 
@@ -17,14 +17,14 @@ u8 pias_priority(u32 size)
     }
 
     //By default, return DSCP of the lowest priority
-    return (u8)PIAS_PRIO_DSCP[PIAS_PRIO_NUM - 1];
+    return PIAS_PRIO_DSCP[PIAS_PRIO_NUM - 1];
 }
 
 /* mark DSCP and enable ECN */
 inline void pias_enable_ecn_dscp(struct sk_buff *skb, u8 dscp)
 {
 	if (likely(skb && skb_make_writable(skb, sizeof(struct iphdr))))
-		ipv4_change_dsfield(ip_hdr(skb), 0xff, (dscp << 2)|INET_ECN_ECT_0);
+		ipv4_change_dsfield(ip_hdr(skb), 0x00, (dscp << 2)|INET_ECN_ECT_0);
 }
 
 /* Determine whether seq1 is larger than seq2 */

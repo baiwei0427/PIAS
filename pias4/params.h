@@ -3,7 +3,7 @@
 
 #include <linux/types.h>
 
-#define PIAS_PRIO_NUM 8 //Number of PIAS priorities
+#define PIAS_PRIO_NUM 2 //Number of PIAS priorities
 
 //Idle time in us
 extern int PIAS_IDLE_TIME;

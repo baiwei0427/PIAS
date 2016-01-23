@@ -5,7 +5,7 @@
 #include <linux/types.h>
 
 /* Decide priority (DSCP) */
-inline u8 pias_priority(u32 size);
+inline int pias_priority(u32 size);
 /* Enable ECN and mark DSCP */
 inline void pias_enable_ecn_dscp(struct sk_buff *skb, u8 dscp);
 /* Determine whether seq1 is larger than seq2 */
